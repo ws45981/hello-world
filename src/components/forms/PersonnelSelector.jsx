@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export default function PersonnelSelector({ label, entries, onAdd, maxEntries = 10 }) {
+export default function PersonnelSelector({ label, entries, onAdd, maxEntries = 10, emsOnly = false }) {
   const [type, setType] = useState("");
   const [selectedPersonnel, setSelectedPersonnel] = useState("");
   const [otherName, setOtherName] = useState("");
@@ -10,6 +10,7 @@ export default function PersonnelSelector({ label, entries, onAdd, maxEntries = 
   const [error, setError] = useState("");
 
   const canAdd = entries.length < maxEntries;
+  const showEmsOnly = emsOnly || false;
 
   const handleAdd = () => {
     setError("");
@@ -89,17 +90,19 @@ export default function PersonnelSelector({ label, entries, onAdd, maxEntries = 
               >
                 Safety/EMS Personnel
               </button>
-              <button
-                type="button"
-                onClick={() => setType("other")}
-                className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
-                  type === "other"
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-300 text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                Other Personnel
-              </button>
+              {!showEmsOnly && (
+                <button
+                  type="button"
+                  onClick={() => setType("other")}
+                  className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
+                    type === "other"
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-300 text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  Other Personnel
+                </button>
+              )}
             </div>
           </div>
 

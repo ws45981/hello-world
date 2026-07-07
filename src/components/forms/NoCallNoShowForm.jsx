@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import PersonnelSelector from "./PersonnelSelector";
 
 const formatDateInput = (value) => {
   const date = value instanceof Date ? value : new Date(value);
@@ -28,38 +27,25 @@ const makeEmptyForm = () => ({
   scheduledTime: "",
   communicationReceived: null,
   communicationDetails: "",
-  witnesses: [],
-  witnessesNA: false,
   additionalDetails: "",
   additionalDetailsNA: false,
-  attachments: [],
 });
 
-export default function NoCallNoShowForm({ user, onSubmit, uploading, onFileUpload, editingData, onCancelEdit }) {
+export default function NoCallNoShowForm({ user, onSubmit, editingData, onCancelEdit }) {
   const [form, setForm] = useState(editingData || makeEmptyForm());
-
-  const handleInvolvedPartiesUpdate = (newEntry, replacedList) => {
-    if (replacedList !== undefined) {
-      setForm((f) => ({ ...f, involvedParties: replacedList }));
-    } else if (newEntry) {
-      setForm((f) => ({ ...f, involvedParties: [...f.involvedParties, newEntry] }));
-    }
-  };
-
-  const handleWitnessesUpdate = (newEntry, replacedList) => {
-    if (replacedList !== undefined) {
-      setForm((f) => ({ ...f, witnesses: replacedList }));
-    } else if (newEntry) {
-      setForm((f) => ({ ...f, witnesses: [...f.witnesses, newEntry] }));
-    }
-  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     onSubmit(form);
   };
 
-  const employeeName = form.involvedParties[0]?.name || "the employee";
+  const personnel = typeof window !== "undefined" ? (window.__EMS_PERSONNEL__ || []) : [];
+  const sortedPersonnel = [...personnel].sort((a, b) =>
+    (a.preferred_name || "").localeCompare(b.preferred_name || "")
+  );
+
+  const selectedName = form.involvedParties[0]?.name || "";
+  const employeeName = selectedName || "the employee";
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -124,15 +110,27 @@ export default function NoCallNoShowForm({ user, onSubmit, uploading, onFileUplo
         </div>
       </div>
 
-      {/* Personnel Name */}
+      {/* Select Person */}
       <div>
-        <label className="mb-2 block text-sm font-medium text-slate-700">Personnel Name</label>
-        <PersonnelSelector
-          label="Personnel"
-          entries={form.involvedParties}
-          onAdd={handleInvolvedPartiesUpdate}
-          maxEntries={1}
-        />
+        <label className="mb-2 block text-sm font-medium text-slate-700">Select Person</label>
+        <select
+          className="w-full rounded-xl border border-slate-300 px-3 py-3"
+          value={selectedName}
+          onChange={(e) => setForm((f) => ({
+            ...f,
+            involvedParties: e.target.value
+              ? [{ type: "ems", name: e.target.value, role: "Safety/EMS Personnel" }]
+              : []
+          }))}
+          required
+        >
+          <option value="">— Select personnel —</option>
+          {sortedPersonnel.map((person) => (
+            <option key={person.id} value={person.preferred_name}>
+              {person.preferred_name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Scheduled Time */}
@@ -208,29 +206,6 @@ export default function NoCallNoShowForm({ user, onSubmit, uploading, onFileUplo
         )}
       </div>
 
-      {/* Witnesses */}
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-sm font-medium text-slate-700">Witnesses</span>
-          <label className="flex items-center gap-2 text-sm text-slate-500 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={form.witnessesNA}
-              onChange={(e) => setForm((f) => ({ ...f, witnessesNA: e.target.checked, witnesses: [] }))}
-            />
-            N/A
-          </label>
-        </div>
-        {!form.witnessesNA && (
-          <PersonnelSelector
-            label="Witness"
-            entries={form.witnesses}
-            onAdd={handleWitnessesUpdate}
-            maxEntries={10}
-          />
-        )}
-      </div>
-
       {/* Additional Details */}
       <div>
         <div className="mb-2 flex items-center justify-between">
@@ -251,27 +226,6 @@ export default function NoCallNoShowForm({ user, onSubmit, uploading, onFileUplo
           disabled={form.additionalDetailsNA}
           placeholder="Any additional context or follow-up needed..."
         />
-      </div>
-
-      {/* Attachments */}
-      <div>
-        <label className="mb-2 block text-sm font-medium text-slate-700">Attachments</label>
-        <input
-          type="file"
-          accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
-          capture={typeof window !== "undefined" && /Mobi|Android/i.test(navigator.userAgent) ? "environment" : undefined}
-          className="w-full rounded-xl border border-slate-300 px-3 py-3 text-sm"
-          onChange={async (e) => {
-            const url = await onFileUpload(e);
-            if (url) setForm((f) => ({ ...f, attachments: [...f.attachments, url] }));
-          }}
-        />
-        {uploading && <p className="mt-2 text-sm text-slate-500">Uploading...</p>}
-        {form.attachments.length > 0 && (
-          <ul className="mt-2 space-y-1 text-sm text-slate-600">
-            {form.attachments.map((a, i) => <li key={i}>📎 {a}</li>)}
-          </ul>
-        )}
       </div>
 
       {/* Submit */}

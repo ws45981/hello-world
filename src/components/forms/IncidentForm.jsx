@@ -121,22 +121,6 @@ export default function IncidentForm({ category, categories, user, onSubmit, upl
         </div>
       </div>
 
-      {/* Category */}
-      <div>
-        <label className="mb-2 block text-sm font-medium text-slate-700">Category</label>
-        <select
-          className="w-full rounded-xl border border-slate-300 px-3 py-3"
-          value={form.category}
-          onChange={(e) => setForm((f) => ({ ...f, category: e.target.value, categoryDescription: "" }))}
-          required
-        >
-          <option value="">— Select a category —</option>
-          {categories.map((cat) => (
-            <option key={cat} value={cat}>{cat}</option>
-          ))}
-        </select>
-      </div>
-
       {form.category === "Other" && (
         <div>
           <label className="mb-2 block text-sm font-medium text-slate-700">Category Description</label>
