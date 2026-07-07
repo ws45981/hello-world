@@ -283,7 +283,10 @@ export default function PHIForm({ categories, user, onSubmit, uploading, onFileU
           accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
           capture={typeof window !== "undefined" && /Mobi|Android/i.test(navigator.userAgent) ? "environment" : undefined}
           className="w-full rounded-xl border border-slate-300 px-3 py-3 text-sm"
-          onChange={onFileUpload}
+          onChange={async (e) => {
+  const url = await onFileUpload(e);
+  if (url) setForm((f) => ({ ...f, attachments: [...f.attachments, url] }));
+}}
         />
         {uploading && <p className="mt-2 text-sm text-slate-500">Uploading...</p>}
         {form.attachments.length > 0 && (
