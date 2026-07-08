@@ -8,42 +8,61 @@ export default function PersonnelSelector({ label, entries, onAdd, maxEntries = 
   const [otherName, setOtherName] = useState("");
   const [otherRole, setOtherRole] = useState("");
   const [error, setError] = useState("");
+  const [readyToAdd, setReadyToAdd] = useState(false);
 
   const canAdd = entries.length < maxEntries;
-  const showEmsOnly = emsOnly || false;
+
+  const formatEntryLabel = (entry) => {
+    if (entry.type === "ems") {
+      return `${entry.name}${entry.certification ? `, ${entry.certification}` : ""} - Safety/EMS Personnel`;
+    }
+    return `${entry.name}${entry.role ? ` - ${entry.role}` : " - Other Personnel"}`;
+  };
+
+  const handleTypeSelect = (selectedType) => {
+    setType(selectedType);
+    setSelectedPersonnel("");
+    setOtherName("");
+    setOtherRole("");
+    setReadyToAdd(false);
+    setError("");
+  };
 
   const handleAdd = () => {
     setError("");
-
-    if (!type) {
-      setError("Please select a type first.");
-      return;
-    }
 
     if (type === "ems") {
       if (!selectedPersonnel) {
         setError("Please select a person.");
         return;
       }
-      onAdd({ type: "ems", name: selectedPersonnel, role: "Safety/EMS Personnel" });
+      const parsed = JSON.parse(selectedPersonnel);
+      onAdd({ type: "ems", name: parsed.name, certification: parsed.certification, role: "Safety/EMS Personnel" });
       setSelectedPersonnel("");
     } else {
       if (!otherName.trim()) {
         setError("Please enter a name.");
         return;
       }
-      onAdd({ type: "other", name: otherName.trim(), role: otherRole.trim() });
+      onAdd({ type: "other", name: otherName.trim(), role: otherRole.trim() || "Other Personnel" });
       setOtherName("");
       setOtherRole("");
     }
 
     setType("");
+    setReadyToAdd(false);
   };
+
+  const personnel = typeof window !== "undefined" ? (window.__EMS_PERSONNEL__ || []) : [];
+  const sortedPersonnel = [...personnel].sort((a, b) =>
+    (a.preferred_name || "").localeCompare(b.preferred_name || "")
+  );
 
   return (
     <div className="space-y-3">
       <label className="block text-sm font-medium text-slate-700">{label}</label>
 
+      {/* Added entries */}
       {entries.length > 0 && (
         <ul className="space-y-2">
           {entries.map((entry, index) => (
@@ -51,12 +70,7 @@ export default function PersonnelSelector({ label, entries, onAdd, maxEntries = 
               key={index}
               className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm"
             >
-              <span>
-                <span className="font-medium">{entry.name}</span>
-                {entry.role && (
-                  <span className="ml-2 text-slate-500">— {entry.role}</span>
-                )}
-              </span>
+              <span className="font-medium">{formatEntryLabel(entry)}</span>
               <button
                 type="button"
                 className="ml-4 text-rose-500 hover:text-rose-700 text-xs"
@@ -74,77 +88,104 @@ export default function PersonnelSelector({ label, entries, onAdd, maxEntries = 
 
       {canAdd && (
         <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
-          <div>
-            <label className="mb-2 block text-xs font-medium text-slate-500 uppercase tracking-wide">
-              Type of {label}
-            </label>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setType("ems")}
-                className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
-                  type === "ems"
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-300 text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                Safety/EMS Personnel
-              </button>
-              {!showEmsOnly && (
+
+          {/* Type selector */}
+          {!type && (
+            <div>
+              <label className="mb-2 block text-xs font-medium text-slate-500 uppercase tracking-wide">
+                Type of {label}
+              </label>
+              <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={() => setType("other")}
-                  className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
-                    type === "other"
-                      ? "border-slate-900 bg-slate-900 text-white"
-                      : "border-slate-300 text-slate-700 hover:bg-slate-50"
-                  }`}
+                  onClick={() => handleTypeSelect("ems")}
+                  className="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
                 >
-                  Other Personnel
+                  Safety/EMS Personnel
                 </button>
-              )}
-            </div>
-          </div>
-
-          {type === "ems" && (
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
-                Select Person
-              </label>
-              <select
-                className="w-full rounded-xl border border-slate-300 px-3 py-3 text-slate-900"
-                value={selectedPersonnel}
-                onChange={(e) => setSelectedPersonnel(e.target.value)}
-              >
-                <option value="">— Select personnel —</option>
-                {[...(window.__EMS_PERSONNEL__ || [])].sort((a, b) =>
-                  a.preferred_name.localeCompare(b.preferred_name)
-                ).map((person) => (
-                  <option key={person.id} value={person.preferred_name}>
-                    {person.preferred_name}
-                  </option>
-                ))}
-              </select>
+                {!emsOnly && (
+                  <button
+                    type="button"
+                    onClick={() => handleTypeSelect("other")}
+                    className="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    Other Personnel
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
+          {/* EMS Personnel selector */}
+          {type === "ems" && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="block text-sm font-medium text-slate-700">Select Person</label>
+                <button
+                  type="button"
+                  className="text-xs text-slate-400 hover:text-slate-600"
+                  onClick={() => handleTypeSelect("")}
+                >
+                  ← Back
+                </button>
+              </div>
+              <select
+                className="w-full rounded-xl border border-slate-300 px-3 py-3 text-slate-900"
+                value={selectedPersonnel}
+                onChange={(e) => {
+                  setSelectedPersonnel(e.target.value);
+                  setReadyToAdd(!!e.target.value);
+                }}
+              >
+                <option value="">— Select personnel —</option>
+                {sortedPersonnel.map((person) => (
+                  <option
+                    key={person.id}
+                    value={JSON.stringify({ name: `${person.preferred_name} ${person.last_name}`, certification: person.certification })}
+                  >
+                    {person.preferred_name} {person.last_name}
+                  </option>
+                ))}
+              </select>
+              {readyToAdd && (
+                <button
+                  type="button"
+                  onClick={handleAdd}
+                  className="w-full rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+                >
+                  Add to Form
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Other Personnel fields */}
           {type === "other" && (
             <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="block text-sm font-medium text-slate-700">Other Personnel</label>
+                <button
+                  type="button"
+                  className="text-xs text-slate-400 hover:text-slate-600"
+                  onClick={() => handleTypeSelect("")}
+                >
+                  ← Back
+                </button>
+              </div>
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Name
-                </label>
+                <label className="mb-2 block text-sm font-medium text-slate-700">Name</label>
                 <input
                   className="w-full rounded-xl border border-slate-300 px-3 py-3"
                   placeholder="Enter full name"
                   value={otherName}
-                  onChange={(e) => setOtherName(e.target.value)}
+                  onChange={(e) => {
+                    setOtherName(e.target.value);
+                    setReadyToAdd(!!e.target.value.trim());
+                  }}
                 />
               </div>
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Role / Job Title
-                </label>
+                <label className="mb-2 block text-sm font-medium text-slate-700">Role / Job Title</label>
                 <input
                   className="w-full rounded-xl border border-slate-300 px-3 py-3"
                   placeholder="Enter role or job title"
@@ -152,22 +193,19 @@ export default function PersonnelSelector({ label, entries, onAdd, maxEntries = 
                   onChange={(e) => setOtherRole(e.target.value)}
                 />
               </div>
+              {readyToAdd && (
+                <button
+                  type="button"
+                  onClick={handleAdd}
+                  className="w-full rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+                >
+                  Add to Form
+                </button>
+              )}
             </div>
           )}
 
-          {error && (
-            <p className="text-sm text-rose-600">{error}</p>
-          )}
-
-          {type && (
-            <button
-              type="button"
-              onClick={handleAdd}
-              className="w-full rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
-            >
-              + Add {label}
-            </button>
-          )}
+          {error && <p className="text-sm text-rose-600">{error}</p>}
         </div>
       )}
 

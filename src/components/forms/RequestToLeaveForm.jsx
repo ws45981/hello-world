@@ -127,7 +127,7 @@ export default function RequestToLeaveForm({ user, onSubmit, editingData, onCanc
           <option value="">— Select personnel —</option>
           {sortedPersonnel.map((person) => (
             <option key={person.id} value={person.preferred_name}>
-              {person.preferred_name}
+              {person.preferred_name} {person.last_name}
             </option>
           ))}
         </select>

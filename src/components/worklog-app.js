@@ -395,7 +395,11 @@ export default function WorkLogApp() {
             <p className="text-sm font-medium text-slate-500">Involved Parties</p>
             <ul className="mt-1 space-y-1">
               {parties.map((p, i) => (
-                <li key={i} className="text-sm">{p.name}{p.role ? ` — ${p.role}` : ""}</li>
+                <li key={i} className="text-sm">
+                  {p.type === "ems"
+                    ? `${p.name}${p.certification ? `, ${p.certification}` : ""} - Safety/EMS Personnel`
+                    : `${p.name} - ${p.role || "Other Personnel"}`}
+                </li>
               ))}
             </ul>
           </div>
@@ -405,7 +409,11 @@ export default function WorkLogApp() {
             <p className="text-sm font-medium text-slate-500">Witnesses</p>
             <ul className="mt-1 space-y-1">
               {witnesses.map((w, i) => (
-                <li key={i} className="text-sm">{w.name}{w.role ? ` — ${w.role}` : ""}</li>
+                <li key={i} className="text-sm">
+                  {w.type === "ems"
+                    ? `${w.name}${w.certification ? `, ${w.certification}` : ""} - Safety/EMS Personnel`
+                    : `${w.name} - ${w.role || "Other Personnel"}`}
+                </li>
               ))}
             </ul>
           </div>
