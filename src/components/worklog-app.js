@@ -9,6 +9,8 @@ import PHIForm from "@/components/forms/PHIForm";
 import LateForShiftForm from "@/components/forms/LateForShiftForm";
 import NoCallNoShowForm from "@/components/forms/NoCallNoShowForm";
 import RequestToLeaveForm from "@/components/forms/RequestToLeaveForm";
+import SupplyNeedForm from "@/components/forms/SupplyNeedForm";
+import MissingExpiringForm from "@/components/forms/MissingExpiringForm";
 
 export default function WorkLogApp() {
   const [user, setUser] = useState(null);
@@ -136,6 +138,12 @@ export default function WorkLogApp() {
       scheduled_until: formData.scheduledUntil || null,
       request_granted: formData.requestGranted ?? null,
       denial_reason: formData.denialReason || null,
+      location: formData.location || null,
+      storage_type: formData.storageType || null,
+      storage_location: formData.storageLocation || null,
+      item_replaced: formData.itemReplaced ?? null,
+      replacement_storage_type: formData.replacementStorageType || null,
+      replacement_storage_location: formData.replacementStorageLocation || null,
       status: "active",
       created_at: editingData ? editingData.created_at : new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -250,6 +258,8 @@ export default function WorkLogApp() {
     if (cat === "Late for Shift") return <LateForShiftForm {...commonProps} />;
     if (cat === "No Call, No Show") return <NoCallNoShowForm {...commonProps} />;
     if (cat === "Request to Leave Early") return <RequestToLeaveForm {...commonProps} />;
+    if (cat === "Supply Need") return <SupplyNeedForm {...commonProps} />;
+    if (cat === "Missing/Expiring Item") return <MissingExpiringForm {...commonProps} />;
     return <IncidentForm {...commonProps} category={cat} />;
   };
 
@@ -336,7 +346,45 @@ export default function WorkLogApp() {
             <p>{entry.denial_reason}</p>
           </div>
         )}
-        {entry.additional_details && (
+        {entry.location && (
+        <div>
+          <p className="text-sm font-medium text-slate-500">Location</p>
+          <p className={entry.location === "SFOT" ? "text-red-600 font-semibold" : "text-blue-600 font-semibold"}>
+            {entry.location}
+          </p>
+        </div>
+      )}
+      {entry.storage_type && (
+        <div>
+          <p className="text-sm font-medium text-slate-500">Storage Type</p>
+          <p>{entry.storage_type}</p>
+        </div>
+      )}
+      {entry.storage_location && (
+        <div>
+          <p className="text-sm font-medium text-slate-500">Storage Location</p>
+          <p>{entry.storage_location}</p>
+        </div>
+      )}
+      {entry.item_replaced !== null && entry.item_replaced !== undefined && (
+        <div>
+          <p className="text-sm font-medium text-slate-500">Item Replaced?</p>
+          <p>{entry.item_replaced ? "Yes" : "No"}</p>
+        </div>
+      )}
+      {entry.replacement_storage_type && (
+        <div>
+          <p className="text-sm font-medium text-slate-500">Replacement Pulled From</p>
+          <p>{entry.replacement_storage_type}</p>
+        </div>
+      )}
+      {entry.replacement_storage_location && (
+        <div>
+          <p className="text-sm font-medium text-slate-500">Replacement Location</p>
+          <p>{entry.replacement_storage_location}</p>
+        </div>
+      )}
+      {entry.additional_details && (
           <div className="md:col-span-2">
             <p className="text-sm font-medium text-slate-500">Additional Details</p>
             <p className="whitespace-pre-wrap">{entry.additional_details}</p>
@@ -497,7 +545,9 @@ export default function WorkLogApp() {
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="mb-6">
               <p className="text-sm font-medium text-slate-500">New incident</p>
-              <h2 className="text-2xl font-semibold">Incident Documentation</h2>
+              <h2 className="text-2xl font-semibold">
+                {activeCategory || "Incident Documentation"}
+              </h2>
             </div>
             {!editingData && (
               <div className="mb-6">
