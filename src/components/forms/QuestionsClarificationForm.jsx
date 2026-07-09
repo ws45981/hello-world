@@ -4,40 +4,20 @@ import { useState } from "react";
 import PersonnelSelector from "./PersonnelSelector";
 import DateTimePicker from "./DateTimePicker";
 
-const formatDateInput = (value) => {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
-};
-
-const formatTimeInput = (value) => {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString("en-CA", {
-    hour12: false,
-    timeZone: "America/Chicago",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
-
-const makeEmptyForm = (category = "") => ({
-  date: formatDateInput(new Date()),
-  time: formatTimeInput(new Date()),
-  category,
-  categoryDescription: "",
+const makeEmptyForm = () => ({
+  date: new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" }),
+  time: new Date().toLocaleTimeString("en-CA", { hour12: false, timeZone: "America/Chicago", hour: "2-digit", minute: "2-digit" }),
+  category: "Questions/Clarification",
   description: "",
   involvedParties: [],
   involvedPartiesNA: false,
-  witnesses: [],
-  witnessesNA: false,
   additionalDetails: "",
   additionalDetailsNA: false,
   attachments: [],
 });
 
-export default function IncidentForm({ category, categories, user, onSubmit, uploading, onFileUpload, editingData, onCancelEdit }) {
-  const [form, setForm] = useState(editingData || makeEmptyForm(category));
+export default function QuestionsClarificationForm({ user, onSubmit, uploading, onFileUpload, editingData, onCancelEdit }) {
+  const [form, setForm] = useState(editingData || makeEmptyForm());
 
   const handleInvolvedPartiesUpdate = (newEntry, replacedList) => {
     if (replacedList !== undefined) {
@@ -47,21 +27,17 @@ export default function IncidentForm({ category, categories, user, onSubmit, upl
     }
   };
 
-  const handleWitnessesUpdate = (newEntry, replacedList) => {
-    if (replacedList !== undefined) {
-      setForm((f) => ({ ...f, witnesses: replacedList }));
-    } else if (newEntry) {
-      setForm((f) => ({ ...f, witnesses: [...f.witnesses, newEntry] }));
-    }
-  };
-
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (!form.description?.trim()) {
+      return;
+    }
     onSubmit(form);
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+
       <DateTimePicker
         date={form.date}
         time={form.time}
@@ -69,34 +45,24 @@ export default function IncidentForm({ category, categories, user, onSubmit, upl
         onTimeChange={(val) => setForm((f) => ({ ...f, time: val }))}
       />
 
-      {form.category === "Other" && (
-        <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">What are you reporting?</label>
-          <input
-            className="w-full rounded-xl border border-slate-300 px-3 py-3"
-            placeholder="Enter a short title or label for this incident. Provide the full account in the Incident Description section below."
-            value={form.categoryDescription}
-            onChange={(e) => setForm((f) => ({ ...f, categoryDescription: e.target.value }))}
-          />
-        </div>
-      )}
-
-      {/* Incident Description */}
+      {/* Question or Clarification Requested */}
       <div>
-        <label className="mb-2 block text-sm font-medium text-slate-700">Incident Description</label>
+        <label className="mb-2 block text-sm font-medium text-slate-700">
+          Question or Clarification Requested
+        </label>
         <textarea
           className="min-h-36 w-full rounded-xl border border-slate-300 px-3 py-3"
-          placeholder="Describe what happened, the circumstances, and the outcome..."
+          placeholder="Describe the question or clarification being requested in as much detail as possible."
           value={form.description}
           onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
           required
         />
       </div>
 
-      {/* Involved Parties */}
+      {/* Who Made This Request */}
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-sm font-medium text-slate-700">Involved Parties</span>
+          <span className="text-sm font-medium text-slate-700">Who Made This Request?</span>
           <label className="flex items-center gap-2 text-sm text-slate-500 cursor-pointer">
             <input
               type="checkbox"
@@ -108,32 +74,9 @@ export default function IncidentForm({ category, categories, user, onSubmit, upl
         </div>
         {!form.involvedPartiesNA && (
           <PersonnelSelector
-            label="Involved Party"
+            label="Requesting Party"
             entries={form.involvedParties}
             onAdd={handleInvolvedPartiesUpdate}
-            maxEntries={10}
-          />
-        )}
-      </div>
-
-      {/* Witnesses */}
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-sm font-medium text-slate-700">Witnesses</span>
-          <label className="flex items-center gap-2 text-sm text-slate-500 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={form.witnessesNA}
-              onChange={(e) => setForm((f) => ({ ...f, witnessesNA: e.target.checked, witnesses: [] }))}
-            />
-            N/A
-          </label>
-        </div>
-        {!form.witnessesNA && (
-          <PersonnelSelector
-            label="Witness"
-            entries={form.witnesses}
-            onAdd={handleWitnessesUpdate}
             maxEntries={10}
           />
         )}

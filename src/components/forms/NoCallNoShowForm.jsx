@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import DateTimePicker from "./DateTimePicker";
 
 const formatDateInput = (value) => {
   const date = value instanceof Date ? value : new Date(value);
@@ -50,65 +51,14 @@ export default function NoCallNoShowForm({ user, onSubmit, editingData, onCancel
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
 
-      {/* Date & Time */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">Date</label>
-          <div className="flex gap-2">
-            <input
-              type="date"
-              className="flex-1 rounded-xl border border-slate-300 px-3 py-3"
-              value={form.date}
-              onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-              required
-            />
-            <button
-              type="button"
-              className="rounded-xl border border-slate-300 px-3 py-3 text-sm hover:bg-slate-50"
-              onClick={() => setForm((f) => ({ ...f, date: formatDateInput(new Date()) }))}
-            >
-              Now
-            </button>
-          </div>
-        </div>
-        <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">Time (CST)</label>
-          <div className="flex items-center gap-2">
-            <select
-              className="w-24 rounded-xl border border-slate-300 px-3 py-3"
-              value={(form.time || "00:00").split(":")[0]}
-              onChange={(e) => {
-                const minutes = (form.time || "00:00").split(":")[1] || "00";
-                setForm((f) => ({ ...f, time: `${e.target.value}:${minutes}` }));
-              }}
-            >
-              {Array.from({ length: 24 }, (_, h) => (
-                <option key={h} value={String(h).padStart(2, "0")}>{String(h).padStart(2, "0")}</option>
-              ))}
-            </select>
-            <span className="text-slate-500">:</span>
-            <select
-              className="w-24 rounded-xl border border-slate-300 px-3 py-3"
-              value={(form.time || "00:00").split(":")[1] || "00"}
-              onChange={(e) => {
-                const hours = (form.time || "00:00").split(":")[0] || "00";
-                setForm((f) => ({ ...f, time: `${hours}:${e.target.value}` }));
-              }}
-            >
-              {Array.from({ length: 60 }, (_, m) => (
-                <option key={m} value={String(m).padStart(2, "0")}>{String(m).padStart(2, "0")}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="rounded-xl border border-slate-300 px-3 py-3 text-sm hover:bg-slate-50"
-              onClick={() => setForm((f) => ({ ...f, time: formatTimeInput(new Date()) }))}
-            >
-              Now
-            </button>
-          </div>
-        </div>
-      </div>
+      <DateTimePicker
+        date={form.date}
+        time={form.time}
+        onDateChange={(val) => setForm((f) => ({ ...f, date: val }))}
+        onTimeChange={(val) => setForm((f) => ({ ...f, time: val }))}
+      />
+
+      {/* Select Person */}
 
       {/* Select Person */}
       <div>

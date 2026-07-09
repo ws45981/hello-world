@@ -11,6 +11,8 @@ import NoCallNoShowForm from "@/components/forms/NoCallNoShowForm";
 import RequestToLeaveForm from "@/components/forms/RequestToLeaveForm";
 import SupplyNeedForm from "@/components/forms/SupplyNeedForm";
 import MissingExpiringForm from "@/components/forms/MissingExpiringForm";
+import QuestionsClarificationForm from "@/components/forms/QuestionsClarificationForm";
+import ReminderForm from "@/components/forms/ReminderForm";
 
 export default function WorkLogApp() {
   const [user, setUser] = useState(null);
@@ -112,6 +114,23 @@ export default function WorkLogApp() {
     setMessage("");
     if (!user || !profile) return;
 
+    // Validate required fields for standard form categories
+    const standardCategories = ["General Comments", "General Policy Violation", "Safety", "Status Quo", "Rude/Bullying/Intimidation", "Rule Violation", "General Policy Violation", "Questions/Clarification", "Reminder", "Other"];
+    if (standardCategories.includes(formData.category || activeCategory)) {
+      if (!formData.description?.trim()) {
+        setError("Incident Description is required.");
+        return;
+      }
+    }
+
+    // Validate PHI required fields
+    if ((formData.category || activeCategory) === "PHI") {
+      if (!formData.phiRequested?.trim()) {
+        setError("Specific PHI Requested is required.");
+        return;
+      }
+    }
+
     const payload = {
       id: editingData?.id ?? `entry-${Date.now()}`,
       employee_id: profile.id,
@@ -144,6 +163,7 @@ export default function WorkLogApp() {
       item_replaced: formData.itemReplaced ?? null,
       replacement_storage_type: formData.replacementStorageType || null,
       replacement_storage_location: formData.replacementStorageLocation || null,
+      departure_time: formData.departureTime || null,
       status: "active",
       created_at: editingData ? editingData.created_at : new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -260,6 +280,8 @@ export default function WorkLogApp() {
     if (cat === "Request to Leave Early") return <RequestToLeaveForm {...commonProps} />;
     if (cat === "Supply Need") return <SupplyNeedForm {...commonProps} />;
     if (cat === "Missing/Expiring Item") return <MissingExpiringForm {...commonProps} />;
+    if (cat === "Questions/Clarification") return <QuestionsClarificationForm {...commonProps} />;
+    if (cat === "Reminder") return <ReminderForm {...commonProps} />;
     return <IncidentForm {...commonProps} category={cat} />;
   };
 
