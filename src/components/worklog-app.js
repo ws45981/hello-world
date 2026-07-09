@@ -32,6 +32,12 @@ export default function WorkLogApp() {
   const [categories, setCategories] = useState(CATEGORIES);
   const [activeCategory, setActiveCategory] = useState("");
   const [personnel, setPersonnel] = useState([]);
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
+  const [forcePasswordChange, setForcePasswordChange] = useState(false);
 
   useEffect(() => {
     const loadSession = async () => {
@@ -40,8 +46,12 @@ export default function WorkLogApp() {
         const userProfile = await getUserProfile(currentUser.id);
         setUser(currentUser);
         setProfile(userProfile);
-        await loadRecords(userProfile);
-        await loadPersonnel();
+        if (!userProfile?.password_changed) {
+          setForcePasswordChange(true);
+        } else {
+          await loadRecords(userProfile);
+          await loadPersonnel();
+        }
       }
       setLoading(false);
     };
@@ -84,8 +94,12 @@ export default function WorkLogApp() {
     const userProfile = await getUserProfile(authUser.id);
     setUser(authUser);
     setProfile(userProfile);
-    await loadRecords(userProfile);
-    await loadPersonnel();
+    if (!userProfile?.password_changed) {
+      setForcePasswordChange(true);
+    } else {
+      await loadRecords(userProfile);
+      await loadPersonnel();
+    }
   };
 
   const handleLogout = async () => {
@@ -96,6 +110,46 @@ export default function WorkLogApp() {
     setViewMode("form");
     setMessage("");
     setError("");
+    setForcePasswordChange(false);
+    setShowAccountMenu(false);
+  };
+
+  const handleChangePassword = async () => {
+    setPasswordError("");
+    setPasswordSuccess("");
+    if (!newPassword || !confirmPassword) {
+      setPasswordError("Please fill in both fields.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Passwords do not match.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordError("Password must be at least 6 characters.");
+      return;
+    }
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      setPasswordError(error.message);
+      return;
+    }
+    await supabase
+      .from("user_profiles")
+      .update({ password_changed: true })
+      .eq("id", user.id);
+
+    setPasswordSuccess("Password updated successfully!");
+    setNewPassword("");
+    setConfirmPassword("");
+    setForcePasswordChange(false);
+    await loadRecords(profile);
+    await loadPersonnel();
+    setTimeout(() => {
+      setShowAccountMenu(false);
+      setPasswordSuccess("");
+    }, 2000);
   };
 
   const getAvailableCategories = () => {
@@ -114,8 +168,7 @@ export default function WorkLogApp() {
     setMessage("");
     if (!user || !profile) return;
 
-    // Validate required fields for standard form categories
-    const standardCategories = ["General Comments", "General Policy Violation", "Safety", "Status Quo", "Rude/Bullying/Intimidation", "Rule Violation", "General Policy Violation", "Questions/Clarification", "Reminder", "Other"];
+    const standardCategories = ["General Comments", "General Policy Violation", "Safety", "Status Quo", "Rude/Bullying/Intimidation", "Rule Violation", "Questions/Clarification", "Reminder", "Other"];
     if (standardCategories.includes(formData.category || activeCategory)) {
       if (!formData.description?.trim()) {
         setError("Incident Description is required.");
@@ -123,7 +176,6 @@ export default function WorkLogApp() {
       }
     }
 
-    // Validate PHI required fields
     if ((formData.category || activeCategory) === "PHI") {
       if (!formData.phiRequested?.trim()) {
         setError("Specific PHI Requested is required.");
@@ -191,15 +243,15 @@ export default function WorkLogApp() {
     }
   };
 
-  const handleFileUpload = async (event, setFormAttachments) => {
+  const handleFileUpload = async (event) => {
     const file = event.target.files?.[0];
-    if (!file || !user) return;
+    if (!file || !user) return null;
     setUploading(true);
     const supabase = getSupabaseClient();
     if (!isSupabaseConfigured() || !supabase) {
       setUploading(false);
       setMessage("File noted locally — Supabase not configured.");
-      return;
+      return null;
     }
     const filePath = `${profile.id}/${Date.now()}-${file.name}`;
     const { error: uploadError } = await supabase.storage
@@ -209,16 +261,13 @@ export default function WorkLogApp() {
       console.error("Upload error:", uploadError);
       setError(`Upload failed: ${uploadError.message}`);
       setUploading(false);
-      return;
+      return null;
     }
     const { data: publicUrlData } = supabase.storage
       .from("incident-attachments")
       .getPublicUrl(filePath);
     setUploading(false);
     setMessage("Attachment uploaded successfully.");
-    if (setFormAttachments) {
-      setFormAttachments(publicUrlData.publicUrl);
-    }
     return publicUrlData.publicUrl;
   };
 
@@ -369,44 +418,50 @@ export default function WorkLogApp() {
           </div>
         )}
         {entry.location && (
-        <div>
-          <p className="text-sm font-medium text-slate-500">Location</p>
-          <p className={entry.location === "SFOT" ? "text-red-600 font-semibold" : "text-blue-600 font-semibold"}>
-            {entry.location}
-          </p>
-        </div>
-      )}
-      {entry.storage_type && (
-        <div>
-          <p className="text-sm font-medium text-slate-500">Storage Type</p>
-          <p>{entry.storage_type}</p>
-        </div>
-      )}
-      {entry.storage_location && (
-        <div>
-          <p className="text-sm font-medium text-slate-500">Storage Location</p>
-          <p>{entry.storage_location}</p>
-        </div>
-      )}
-      {entry.item_replaced !== null && entry.item_replaced !== undefined && (
-        <div>
-          <p className="text-sm font-medium text-slate-500">Item Replaced?</p>
-          <p>{entry.item_replaced ? "Yes" : "No"}</p>
-        </div>
-      )}
-      {entry.replacement_storage_type && (
-        <div>
-          <p className="text-sm font-medium text-slate-500">Replacement Pulled From</p>
-          <p>{entry.replacement_storage_type}</p>
-        </div>
-      )}
-      {entry.replacement_storage_location && (
-        <div>
-          <p className="text-sm font-medium text-slate-500">Replacement Location</p>
-          <p>{entry.replacement_storage_location}</p>
-        </div>
-      )}
-      {entry.additional_details && (
+          <div>
+            <p className="text-sm font-medium text-slate-500">Location</p>
+            <p className={entry.location === "SFOT" ? "text-red-600 font-semibold" : "text-blue-600 font-semibold"}>
+              {entry.location}
+            </p>
+          </div>
+        )}
+        {entry.storage_type && (
+          <div>
+            <p className="text-sm font-medium text-slate-500">Storage Type</p>
+            <p>{entry.storage_type}</p>
+          </div>
+        )}
+        {entry.storage_location && (
+          <div>
+            <p className="text-sm font-medium text-slate-500">Storage Location</p>
+            <p>{entry.storage_location}</p>
+          </div>
+        )}
+        {entry.item_replaced !== null && entry.item_replaced !== undefined && (
+          <div>
+            <p className="text-sm font-medium text-slate-500">Item Replaced?</p>
+            <p>{entry.item_replaced ? "Yes" : "No"}</p>
+          </div>
+        )}
+        {entry.replacement_storage_type && (
+          <div>
+            <p className="text-sm font-medium text-slate-500">Replacement Pulled From</p>
+            <p>{entry.replacement_storage_type}</p>
+          </div>
+        )}
+        {entry.replacement_storage_location && (
+          <div>
+            <p className="text-sm font-medium text-slate-500">Replacement Location</p>
+            <p>{entry.replacement_storage_location}</p>
+          </div>
+        )}
+        {entry.departure_time && (
+          <div>
+            <p className="text-sm font-medium text-slate-500">Departure Time</p>
+            <p>{entry.departure_time}</p>
+          </div>
+        )}
+        {entry.additional_details && (
           <div className="md:col-span-2">
             <p className="text-sm font-medium text-slate-500">Additional Details</p>
             <p className="whitespace-pre-wrap">{entry.additional_details}</p>
@@ -468,6 +523,69 @@ export default function WorkLogApp() {
     return <LoginForm onLogin={handleLogin} />;
   }
 
+  if (forcePasswordChange) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center px-4">
+        <div className="w-full max-w-md">
+          <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+            <div className="mb-6 text-center">
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-400 mb-1">
+                EMS / Safety Incident Documentation
+              </p>
+              <h1 className="text-3xl font-semibold text-slate-900">WorkLog</h1>
+            </div>
+            <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-sm font-medium text-amber-800">Password Change Required</p>
+              <p className="text-sm text-amber-700 mt-1">
+                For your security, you must set a new password before continuing. Please choose a password that is unique to you and do not share it with others.
+              </p>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">New Password</label>
+                <input
+                  type="password"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3"
+                  placeholder="Enter new password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">Confirm New Password</label>
+                <input
+                  type="password"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3"
+                  placeholder="Confirm new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+              </div>
+              {passwordError && (
+                <p className="rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-600">{passwordError}</p>
+              )}
+              {passwordSuccess && (
+                <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-600">{passwordSuccess}</p>
+              )}
+              <button
+                className="w-full rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-slate-700"
+                onClick={handleChangePassword}
+              >
+                Set New Password & Continue
+              </button>
+              <button
+                className="w-full rounded-xl border border-slate-300 px-5 py-3 font-medium text-slate-600 hover:bg-slate-50"
+                onClick={handleLogout}
+              >
+                Log Out
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800">
       <header className="bg-slate-900 text-white shadow-sm">
@@ -479,9 +597,47 @@ export default function WorkLogApp() {
             <h1 className="text-2xl font-semibold">WorkLog</h1>
           </div>
           <div className="flex items-center gap-3">
-            <span className="rounded-full bg-white/10 px-3 py-2 text-sm">
-              👤 {profile?.full_name || user.email}
-            </span>
+            <div className="relative">
+              <button
+                className="rounded-full bg-white/10 px-3 py-2 text-sm hover:bg-white/20"
+                onClick={() => setShowAccountMenu((v) => !v)}
+              >
+                👤 {profile?.full_name || user.email}
+              </button>
+              {showAccountMenu && (
+                <div className="absolute right-0 top-12 z-50 w-72 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+                  <p className="text-sm font-medium text-slate-700 mb-3">Change Password</p>
+                  <input
+                    type="password"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm mb-2"
+                    placeholder="New password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                  <input
+                    type="password"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm mb-2"
+                    placeholder="Confirm new password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                  />
+                  {passwordError && <p className="text-xs text-rose-600 mb-2">{passwordError}</p>}
+                  {passwordSuccess && <p className="text-xs text-emerald-600 mb-2">{passwordSuccess}</p>}
+                  <button
+                    className="w-full rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700"
+                    onClick={handleChangePassword}
+                  >
+                    Update Password
+                  </button>
+                  <button
+                    className="w-full mt-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50 text-slate-700"
+                    onClick={() => setShowAccountMenu(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </div>
             <span className={`rounded-full px-3 py-1 text-xs font-medium ${
               profile?.role === ROLES.MASTER_ADMIN ? "bg-emerald-600" :
               profile?.role === ROLES.LEADERSHIP ? "bg-blue-600" : "bg-slate-600"
