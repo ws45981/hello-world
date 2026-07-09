@@ -34,9 +34,15 @@ const makeEmptyForm = () => ({
 
 export default function NoCallNoShowForm({ user, onSubmit, editingData, onCancelEdit }) {
   const [form, setForm] = useState(editingData || makeEmptyForm());
+  const [submitError, setSubmitError] = useState("");
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (form.involvedParties.length === 0) {
+      setSubmitError("Please select a person before submitting.");
+      return;
+    }
+    setSubmitError("");
     onSubmit(form);
   };
 
@@ -177,6 +183,13 @@ export default function NoCallNoShowForm({ user, onSubmit, editingData, onCancel
           placeholder="Any additional context or follow-up needed..."
         />
       </div>
+
+      {/* Submit */}
+      {submitError && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          🚫 {submitError}
+        </div>
+      )}
 
       {/* Submit */}
       <div className="flex flex-wrap gap-3">
