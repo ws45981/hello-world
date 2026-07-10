@@ -184,7 +184,7 @@ export default function WorkLogApp() {
     }
 
     const payload = {
-      id: editingData?.id ?? `entry-${Date.now()}`,
+      id: editingData?.id || `entry-${Date.now()}`,
       employee_id: profile.id,
       employee_name: profile.full_name,
       date: formData.date,
@@ -232,7 +232,7 @@ export default function WorkLogApp() {
       }
     }
 
-    if (editingData) {
+    if (editingData && editingData.id) {
       setRecords((current) => current.map((r) => r.id === editingData.id ? { ...r, ...payload } : r));
       setMessage("Entry updated successfully.");
       setEditingData(null);
