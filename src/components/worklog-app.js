@@ -246,13 +246,14 @@ export default function WorkLogApp() {
       setMessage("Entry updated successfully.");
       setEditingData(null);
       setActiveCategory("");
-      setViewMode("form");
+      setViewMode("entries");
+      setTimeout(() => setViewMode("form"), 50);
     } else {
       setRecords((current) => [payload, ...current]);
       setMessage("Your entry was recorded successfully.");
       setViewMode("confirmation");
     }
-    
+
   };
 
   const handleFileUpload = async (event) => {
