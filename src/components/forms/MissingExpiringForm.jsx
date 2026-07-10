@@ -96,7 +96,7 @@ export default function MissingExpiringForm({ user, onSubmit, uploading, onFileU
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit(form);
+    onSubmit({ ...form, id: editingData?.id });
   };
 
   const getStorageOptions = (storageType) => {

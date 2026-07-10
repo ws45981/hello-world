@@ -32,7 +32,7 @@ export default function QuestionsClarificationForm({ user, onSubmit, uploading, 
     if (!form.description?.trim()) {
       return;
     }
-    onSubmit(form);
+    onSubmit({ ...form, id: editingData?.id });
   };
 
   return (
@@ -81,6 +81,7 @@ export default function QuestionsClarificationForm({ user, onSubmit, uploading, 
           />
         )}
       </div>
+    
 
       {/* Additional Details */}
       <div>

@@ -28,7 +28,7 @@ export default function LateForShiftForm({ user, onSubmit, editingData, onCancel
       return;
     }
     setSubmitError("");
-    onSubmit(form);
+    onSubmit({ ...form, id: editingData?.id });
   };
 
   const personnel = typeof window !== "undefined" ? (window.__EMS_PERSONNEL__ || []) : [];

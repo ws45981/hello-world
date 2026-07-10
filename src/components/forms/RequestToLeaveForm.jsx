@@ -21,7 +21,7 @@ export default function RequestToLeaveForm({ user, onSubmit, editingData, onCanc
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit(form);
+    onSubmit({ ...form, id: editingData?.id });
   };
 
   const personnel = typeof window !== "undefined" ? (window.__EMS_PERSONNEL__ || []) : [];

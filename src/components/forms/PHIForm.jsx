@@ -68,7 +68,7 @@ export default function PHIForm({ categories, user, onSubmit, uploading, onFileU
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit(form);
+    onSubmit({ ...form, id: editingData?.id });
   };
 
   return (

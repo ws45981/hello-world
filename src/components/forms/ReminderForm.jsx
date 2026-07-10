@@ -29,7 +29,7 @@ export default function ReminderForm({ user, onSubmit, uploading, onFileUpload, 
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit(form);
+    onSubmit({ ...form, id: editingData?.id });
   };
 
   return (

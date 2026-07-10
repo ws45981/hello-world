@@ -93,7 +93,7 @@ export default function SupplyNeedForm({ user, onSubmit, uploading, onFileUpload
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit(form);
+    onSubmit({ ...form, id: editingData?.id });
   };
 
   const getStorageOptions = () => {
