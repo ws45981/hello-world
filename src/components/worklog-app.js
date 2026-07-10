@@ -225,17 +225,24 @@ export default function WorkLogApp() {
 
     const supabase = getSupabaseClient();
     if (isSupabaseConfigured() && supabase) {
-      const { error: supabaseError } = editingData
-        ? await supabase.from("incident_entries").update(payload).eq("id", editingData.id)
-        : await supabase.from("incident_entries").insert(payload);
+      const editId = formData._editingId || editingData?.id;
+      let supabaseError;
+      if (editId) {
+        const result = await supabase.from("incident_entries").update(payload).eq("id", editId);
+        supabaseError = result.error;
+      } else {
+        const result = await supabase.from("incident_entries").insert(payload);
+        supabaseError = result.error;
+      }
       if (supabaseError) {
         setError(supabaseError.message);
         return;
       }
     }
 
-    if (formData._editingId || editingData) {
-      setRecords((current) => current.map((r) => r.id === editingData.id ? { ...r, ...payload } : r));
+    const editId = formData._editingId || editingData?.id;
+    if (editId) {
+      setRecords((current) => current.map((r) => r.id === editId ? { ...r, ...payload } : r));
       setMessage("Entry updated successfully.");
       setEditingData(null);
       setActiveCategory("");
@@ -245,6 +252,7 @@ export default function WorkLogApp() {
       setMessage("Your entry was recorded successfully.");
       setViewMode("confirmation");
     }
+    
   };
 
   const handleFileUpload = async (event) => {
