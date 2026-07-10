@@ -1065,7 +1065,7 @@ export default function WorkLogApp() {
                 </tbody>
               </table>
             </div>
-            )}
+            }
           {showDeletedSubmissions && (
             <div className="mt-6">
               <h3 className="text-lg font-semibold text-slate-700 mb-3">Deleted Submissions</h3>
