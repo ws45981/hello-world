@@ -1053,7 +1053,7 @@ export default function WorkLogApp() {
                         {selectedEntry?.id === record.id && (
                           <tr>
                             <td colSpan={6} className="px-4 py-4 bg-slate-50 border-t border-slate-200">
-                              {renderEntryDetail(record)}
+                              <p>Test - entry detail should show here</p>
                             </td>
                           </tr>
                         )}
