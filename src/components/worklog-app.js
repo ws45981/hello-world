@@ -186,7 +186,7 @@ export default function WorkLogApp() {
     }
 
     const payload = {
-      id: editingData?.id || formData.id || `entry-${Date.now()}`,
+      id: formData._editingId || editingData?.id || formData.id || `entry-${Date.now()}`,
       employee_id: profile.id,
       employee_name: profile.full_name,
       date: formData.date,
@@ -234,7 +234,7 @@ export default function WorkLogApp() {
       }
     }
 
-    if (editingData) {
+    if (formData._editingId || editingData) {
       setRecords((current) => current.map((r) => r.id === editingData.id ? { ...r, ...payload } : r));
       setMessage("Entry updated successfully.");
       setEditingData(null);
@@ -364,7 +364,7 @@ export default function WorkLogApp() {
     const commonProps = {
       user,
       categories: getAvailableCategories(),
-      onSubmit: handleSubmit,
+      onSubmit: (formData) => handleSubmit({ ...formData, _editingId: editingData?.id }),
       uploading,
       onFileUpload: handleFileUpload,
       editingData,
