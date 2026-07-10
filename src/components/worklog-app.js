@@ -245,7 +245,7 @@ export default function WorkLogApp() {
       setRecords((current) => current.map((r) => r.id === editId ? { ...r, ...payload } : r));
       setEditingData(null);
       setActiveCategory("");
-      window.location.href = window.location.href;
+      window.location.reload();
     } else {
       setRecords((current) => [payload, ...current]);
       setMessage("Your entry was recorded successfully.");
