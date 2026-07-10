@@ -1004,9 +1004,11 @@ export default function WorkLogApp() {
                       const matchEmp = !employeeFilter || r.employee_name?.toLowerCase().includes(employeeFilter.toLowerCase());
                       return matchCat && matchFrom && matchTo && matchEmp;
                     })
-                    .map((record) => (
-                      <>
-                        <tr key={record.id} className={`border-t border-slate-200 ${record.status === "deleted" ? "bg-rose-50" : ""}`}>
+                    .map((record) => {
+                      const isSelected = selectedEntry?.id === record.id;
+                      return (
+                      <React.Fragment key={record.id}>
+                        <tr className={`border-t border-slate-200 ${record.status === "deleted" ? "bg-rose-50" : ""}`}>
                           <td className="px-3 py-3">{record.employee_name}</td>
                           <td className="px-3 py-3">{record.date}</td>
                           <td className="px-3 py-3">{record.category}</td>
@@ -1050,12 +1052,19 @@ export default function WorkLogApp() {
                             </div>
                           </td>
                         </tr>
-                      </>
-                    ))}
+                      {isSelected && (
+                          <tr>
+                            <td colSpan={6} className="px-4 py-4 bg-slate-50 border-t border-slate-200">
+                              {renderEntryDetail(record)}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
-            {selectedEntry && (
               <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-semibold text-slate-700">Entry Details</h3>
