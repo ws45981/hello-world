@@ -38,6 +38,8 @@ export default function WorkLogApp() {
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState("");
   const [forcePasswordChange, setForcePasswordChange] = useState(false);
+  const [showDeletedSubmissions, setShowDeletedSubmissions] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
 
   useEffect(() => {
     const loadSession = async () => {
@@ -331,17 +333,83 @@ export default function WorkLogApp() {
     setViewMode("form");
   };
 
-  const deleteEntry = async (entryId) => {
+  const deleteEntry = (entry) => {
+    setShowDeleteConfirm(entry);
+  };
+
+  const confirmDelete = async (deleteAttachments) => {
+    const entry = showDeleteConfirm;
+    if (!entry) return;
+    setShowDeleteConfirm(null);
+
+    const supabase = getSupabaseClient();
+    if (isSupabaseConfigured() && supabase) {
+      // Delete attachments from storage if requested
+      if (deleteAttachments && entry.attachments?.length > 0) {
+        for (const url of entry.attachments) {
+          try {
+            const path = url.split("/incident-attachments/")[1];
+            if (path) {
+              await supabase.storage.from("incident-attachments").remove([path]);
+            }
+          } catch (e) {
+            console.error("Error deleting attachment:", e);
+          }
+        }
+        // Update record with empty attachments
+        await supabase
+          .from("incident_entries")
+          .update({ status: "deleted", attachments: [] })
+          .eq("id", entry.id);
+      } else {
+        await supabase
+          .from("incident_entries")
+          .update({ status: "deleted" })
+          .eq("id", entry.id);
+      }
+    }
+
+    setRecords((current) => current.map((r) => 
+      r.id === entry.id 
+        ? { ...r, status: "deleted", attachments: deleteAttachments ? [] : r.attachments }
+        : r
+    ));
+    setMessage("Entry moved to Deleted Submissions.");
+  };
+
+  const permanentlyDelete = async (entryId) => {
     const supabase = getSupabaseClient();
     if (isSupabaseConfigured() && supabase) {
       const { error } = await supabase
         .from("incident_entries")
-        .update({ status: "deleted" })
+        .update({ permanently_deleted: true })
         .eq("id", entryId);
       if (error) { setError(error.message); return; }
     }
     setRecords((current) => current.filter((r) => r.id !== entryId));
-    setMessage("Entry deleted.");
+    setMessage("Entry permanently deleted.");
+  };
+
+  const toggleReviewed = async (entry) => {
+    const supabase = getSupabaseClient();
+    const newReviewed = !entry.reviewed;
+    if (isSupabaseConfigured() && supabase) {
+      const { error } = await supabase
+        .from("incident_entries")
+        .update({ 
+          reviewed: newReviewed,
+          reviewed_at: newReviewed ? new Date().toISOString() : null,
+          reviewed_by: newReviewed ? profile.full_name : null
+        })
+        .eq("id", entry.id);
+      if (error) { setError(error.message); return; }
+    }
+    setRecords((current) => current.map((r) => 
+      r.id === entry.id 
+        ? { ...r, reviewed: newReviewed, reviewed_at: newReviewed ? new Date().toISOString() : null, reviewed_by: newReviewed ? profile.full_name : null }
+        : r
+    ));
+    setMessage(newReviewed ? "Entry marked as reviewed." : "Review flag removed.");
   };
 
   const exportCsv = () => {
@@ -844,7 +912,7 @@ export default function WorkLogApp() {
                         </button>
                         <button
                           className="rounded-full bg-rose-50 px-3 py-1 text-sm text-rose-600"
-                          onClick={() => deleteEntry(entry.id)}
+                          onClick={() => deleteEntry(entry)}
                         >
                           Delete
                         </button>
@@ -868,12 +936,20 @@ export default function WorkLogApp() {
                 <p className="text-sm font-medium text-slate-500">Administrative view</p>
                 <h2 className="text-2xl font-semibold">All Submissions</h2>
               </div>
-              <button
-                className="rounded-xl bg-slate-900 px-4 py-2 font-semibold text-white"
-                onClick={exportCsv}
-              >
-                Export CSV
-              </button>
+              <div className="flex gap-2">
+                <button
+                  className="rounded-xl bg-slate-900 px-4 py-2 font-semibold text-white"
+                  onClick={exportCsv}
+                >
+                  Export CSV
+                </button>
+                <button
+                  className={`rounded-xl border px-4 py-2 font-semibold ${showDeletedSubmissions ? "bg-rose-600 text-white border-rose-600" : "border-slate-300 text-slate-700"}`}
+                  onClick={() => setShowDeletedSubmissions(!showDeletedSubmissions)}
+                >
+                  {showDeletedSubmissions ? "Hide Deleted" : "Deleted Submissions"}
+                </button>
+              </div>
             </div>
 
             <div className="mb-4 grid gap-3 md:grid-cols-4">
@@ -920,6 +996,7 @@ export default function WorkLogApp() {
                 <tbody>
                   {records
                     .filter((r) => {
+                      if (r.status === "deleted" || r.permanently_deleted) return false;
                       const matchCat = selectedCategory === "All" || r.category === selectedCategory;
                       const matchFrom = !dateFrom || r.date >= dateFrom;
                       const matchTo = !dateTo || r.date <= dateTo;
@@ -934,16 +1011,23 @@ export default function WorkLogApp() {
                           <td className="px-3 py-3">{record.category}</td>
                           <td className="px-3 py-3 max-w-xs truncate">{record.description}</td>
                           <td className="px-3 py-3">
-                            <span className={`rounded-full px-2 py-1 text-xs font-medium ${
-                              record.status === "deleted" ? "bg-rose-100 text-rose-700" :
-                              record.status === "archived" ? "bg-amber-100 text-amber-700" :
-                              "bg-emerald-100 text-emerald-700"
-                            }`}>
-                              {record.status || "active"}
-                            </span>
+                            <div className="flex flex-col gap-1">
+                              <span className={`rounded-full px-2 py-1 text-xs font-medium ${
+                                record.status === "deleted" ? "bg-rose-100 text-rose-700" :
+                                record.status === "archived" ? "bg-amber-100 text-amber-700" :
+                                "bg-emerald-100 text-emerald-700"
+                              }`}>
+                                {record.status || "active"}
+                              </span>
+                              {record.reviewed && (
+                                <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">
+                                  ✓ Reviewed
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-3 py-3">
-                            <div className="flex gap-2">
+                            <div className="flex flex-wrap gap-2">
                               <button
                                 className="rounded-full bg-slate-100 px-3 py-1 text-xs"
                                 onClick={() => setSelectedEntry(selectedEntry?.id === record.id ? null : record)}
@@ -951,8 +1035,14 @@ export default function WorkLogApp() {
                                 {selectedEntry?.id === record.id ? "Close" : "View"}
                               </button>
                               <button
+                                className={`rounded-full px-3 py-1 text-xs ${record.reviewed ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"}`}
+                                onClick={() => toggleReviewed(record)}
+                              >
+                                {record.reviewed ? "✓ Reviewed" : "Mark Reviewed"}
+                              </button>
+                              <button
                                 className="rounded-full bg-rose-50 px-3 py-1 text-xs text-rose-600"
-                                onClick={() => deleteEntry(record.id)}
+                                onClick={() => deleteEntry(record)}
                               >
                                 Delete
                               </button>
@@ -971,6 +1061,57 @@ export default function WorkLogApp() {
                 </tbody>
               </table>
             </div>
+          {showDeletedSubmissions && (
+            <div className="mt-6">
+              <h3 className="text-lg font-semibold text-slate-700 mb-3">Deleted Submissions</h3>
+              <div className="overflow-x-auto rounded-xl border border-rose-200">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-rose-50 text-slate-600">
+                    <tr>
+                      <th className="px-3 py-2">Employee</th>
+                      <th className="px-3 py-2">Date</th>
+                      <th className="px-3 py-2">Category</th>
+                      <th className="px-3 py-2">Description</th>
+                      <th className="px-3 py-2">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {records
+                      .filter((r) => r.status === "deleted" && !r.permanently_deleted)
+                      .map((record) => (
+                        <tr key={record.id} className="border-t border-rose-100">
+                          <td className="px-3 py-3">{record.employee_name}</td>
+                          <td className="px-3 py-3">{record.date}</td>
+                          <td className="px-3 py-3">{record.category}</td>
+                          <td className="px-3 py-3 max-w-xs truncate">{record.description}</td>
+                          <td className="px-3 py-3">
+                            <div className="flex gap-2">
+                              <button
+                                className="rounded-full bg-slate-100 px-3 py-1 text-xs"
+                                onClick={() => setSelectedEntry(selectedEntry?.id === record.id ? null : record)}
+                              >
+                                {selectedEntry?.id === record.id ? "Close" : "View"}
+                              </button>
+                              <button
+                                className="rounded-full bg-rose-100 px-3 py-1 text-xs text-rose-700 font-medium"
+                                onClick={() => permanentlyDelete(record.id)}
+                              >
+                                Permanently Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    {records.filter((r) => r.status === "deleted" && !r.permanently_deleted).length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-3 py-4 text-sm text-slate-500 text-center">No deleted submissions.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
           </section>
         )}
 
@@ -1010,6 +1151,55 @@ export default function WorkLogApp() {
           </section>
         )}
       </main>
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-900">Delete Submission</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Would you also like to delete the attachments associated with this submission? This cannot be undone.
+            </p>
+            {showDeleteConfirm.attachments?.length > 0 ? (
+              <div className="mt-4 flex flex-col gap-2">
+                <button
+                  className="w-full rounded-xl bg-rose-600 px-4 py-3 font-semibold text-white hover:bg-rose-700"
+                  onClick={() => confirmDelete(true)}
+                >
+                  Delete Submission & Attachments
+                </button>
+                <button
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 font-medium hover:bg-slate-50"
+                  onClick={() => confirmDelete(false)}
+                >
+                  Delete Submission Only (Keep Attachments)
+                </button>
+                <button
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-500 hover:bg-slate-50"
+                  onClick={() => setShowDeleteConfirm(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="mt-4 flex flex-col gap-2">
+                <button
+                  className="w-full rounded-xl bg-rose-600 px-4 py-3 font-semibold text-white hover:bg-rose-700"
+                  onClick={() => confirmDelete(false)}
+                >
+                  Delete Submission
+                </button>
+                <button
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-500 hover:bg-slate-50"
+                  onClick={() => setShowDeleteConfirm(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
