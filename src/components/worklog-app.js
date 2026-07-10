@@ -232,10 +232,12 @@ export default function WorkLogApp() {
       }
     }
 
-    if (editingData && editingData.id) {
+    if (editingData) {
       setRecords((current) => current.map((r) => r.id === editingData.id ? { ...r, ...payload } : r));
       setMessage("Entry updated successfully.");
       setEditingData(null);
+      setActiveCategory("");
+      setViewMode("entries");
     } else {
       setRecords((current) => [payload, ...current]);
       setMessage("Your entry was recorded successfully.");
