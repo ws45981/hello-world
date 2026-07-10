@@ -46,11 +46,27 @@ export async function getCurrentUser() {
 export async function getUserProfile(userId) {
   const supabase = getSupabaseClient();
   if (!supabase) return null;
+  
   const { data, error } = await supabase
     .from('user_profiles')
     .select('*')
     .eq('id', userId)
     .single();
-  if (error) return null;
+  
+  if (error || !data) {
+    // Auto-create profile if it doesn't exist
+    const { data: newProfile } = await supabase
+      .from('user_profiles')
+      .insert({
+        id: userId,
+        employee_id: userId,
+        role: 'general_user',
+        password_changed: false,
+      })
+      .select()
+      .single();
+    return newProfile;
+  }
+  
   return data;
 }
