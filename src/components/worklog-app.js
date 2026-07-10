@@ -184,7 +184,7 @@ export default function WorkLogApp() {
     }
 
     const payload = {
-      id: editingData?.id || `entry-${Date.now()}`,
+      id: editingData?.id || formData.id || `entry-${Date.now()}`,
       employee_id: profile.id,
       employee_name: profile.full_name,
       date: formData.date,
