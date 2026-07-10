@@ -243,11 +243,9 @@ export default function WorkLogApp() {
     const editId = formData._editingId || editingData?.id;
     if (editId) {
       setRecords((current) => current.map((r) => r.id === editId ? { ...r, ...payload } : r));
-      setMessage("Entry updated successfully.");
       setEditingData(null);
       setActiveCategory("");
-      setViewMode("entries");
-      setTimeout(() => setViewMode("form"), 50);
+      window.location.href = window.location.href;
     } else {
       setRecords((current) => [payload, ...current]);
       setMessage("Your entry was recorded successfully.");
