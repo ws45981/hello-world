@@ -272,7 +272,25 @@ export default function WorkLogApp() {
   };
 
   const startEdit = (entry) => {
-    setEditingData(entry);
+    const safeEntry = {
+      ...entry,
+      involvedParties: Array.isArray(entry.involved_parties)
+        ? entry.involved_parties
+        : typeof entry.involved_parties === "string"
+        ? JSON.parse(entry.involved_parties || "[]")
+        : [],
+      witnesses: Array.isArray(entry.witnesses)
+        ? entry.witnesses
+        : typeof entry.witnesses === "string"
+        ? JSON.parse(entry.witnesses || "[]")
+        : [],
+      attachments: Array.isArray(entry.attachments)
+        ? entry.attachments
+        : typeof entry.attachments === "string"
+        ? JSON.parse(entry.attachments || "[]")
+        : [],
+    };
+    setEditingData(safeEntry);
     setActiveCategory(entry.category);
     setViewMode("form");
   };
