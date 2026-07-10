@@ -1005,8 +1005,8 @@ export default function WorkLogApp() {
                       return matchCat && matchFrom && matchTo && matchEmp;
                     })
                     .map((record) => (
-                      <React.Fragment key={record.id}>
-                        <tr className={`border-t border-slate-200 ${record.status === "deleted" ? "bg-rose-50" : ""}`}>
+                      <>
+                        <tr key={record.id} className={`border-t border-slate-200 ${record.status === "deleted" ? "bg-rose-50" : ""}`}>
                           <td className="px-3 py-3">{record.employee_name}</td>
                           <td className="px-3 py-3">{record.date}</td>
                           <td className="px-3 py-3">{record.category}</td>
@@ -1057,7 +1057,7 @@ export default function WorkLogApp() {
                             </td>
                           </tr>
                         )}
-                      </React.Fragment>
+                      </>
                     ))}
                 </tbody>
               </table>
@@ -1089,7 +1089,7 @@ export default function WorkLogApp() {
                             <div className="flex gap-2">
                               <button
                                 className="rounded-full bg-slate-100 px-3 py-1 text-xs"
-                                onClick={() => setSelectedEntry(selectedEntry?.id === record.id ? null : record)}
+                                onClick={() => { console.log("record.id:", record.id); console.log("selectedEntry:", selectedEntry); setSelectedEntry(selectedEntry?.id === record.id ? null : record); }}
                               >
                                 {selectedEntry?.id === record.id ? "Close" : "View"}
                               </button>
