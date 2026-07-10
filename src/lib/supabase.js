@@ -55,11 +55,15 @@ export async function getUserProfile(userId) {
   
   if (error || !data) {
     // Auto-create profile if it doesn't exist
+    // Get the user's email to use as fallback name
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    
     const { data: newProfile } = await supabase
       .from('user_profiles')
       .insert({
         id: userId,
         employee_id: userId,
+        full_name: authUser?.email || 'Unknown User',
         role: 'general_user',
         password_changed: false,
       })
