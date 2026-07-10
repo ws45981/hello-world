@@ -237,7 +237,7 @@ export default function WorkLogApp() {
       setMessage("Entry updated successfully.");
       setEditingData(null);
       setActiveCategory("");
-      setViewMode("entries");
+      setViewMode("form");
     } else {
       setRecords((current) => [payload, ...current]);
       setMessage("Your entry was recorded successfully.");
