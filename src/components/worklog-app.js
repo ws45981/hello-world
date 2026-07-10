@@ -1007,71 +1007,64 @@ export default function WorkLogApp() {
                     .map((record) => {
                       const isSelected = selectedEntry?.id === record.id;
                       return (
-                      <React.Fragment key={record.id}>
-                        <tr className={`border-t border-slate-200 ${record.status === "deleted" ? "bg-rose-50" : ""}`}>
-                          <td className="px-3 py-3">{record.employee_name}</td>
-                          <td className="px-3 py-3">{record.date}</td>
-                          <td className="px-3 py-3">{record.category}</td>
-                          <td className="px-3 py-3 max-w-xs truncate">{record.description}</td>
-                          <td className="px-3 py-3">
-                            <div className="flex flex-col gap-1">
-                              <span className={`rounded-full px-2 py-1 text-xs font-medium ${
-                                record.status === "deleted" ? "bg-rose-100 text-rose-700" :
-                                record.status === "archived" ? "bg-amber-100 text-amber-700" :
-                                "bg-emerald-100 text-emerald-700"
-                              }`}>
-                                {record.status || "active"}
-                              </span>
-                              {record.reviewed && (
-                                <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">
-                                  ✓ Reviewed
+                        <React.Fragment key={record.id}>
+                          <tr className={`border-t border-slate-200 ${record.status === "deleted" ? "bg-rose-50" : ""}`}>
+                            <td className="px-3 py-3">{record.employee_name}</td>
+                            <td className="px-3 py-3">{record.date}</td>
+                            <td className="px-3 py-3">{record.category}</td>
+                            <td className="px-3 py-3 max-w-xs truncate">{record.description}</td>
+                            <td className="px-3 py-3">
+                              <div className="flex flex-col gap-1">
+                                <span className={`rounded-full px-2 py-1 text-xs font-medium ${
+                                  record.status === "deleted" ? "bg-rose-100 text-rose-700" :
+                                  record.status === "archived" ? "bg-amber-100 text-amber-700" :
+                                  "bg-emerald-100 text-emerald-700"
+                                }`}>
+                                  {record.status || "active"}
                                 </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-3 py-3">
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                className="rounded-full bg-slate-100 px-3 py-1 text-xs"
-                                onClick={() => setSelectedEntry(selectedEntry?.id === record.id ? null : record)}
-                              >
-                                {selectedEntry?.id === record.id ? "Close" : "View"}
-                              </button>
-                              <button
-                                className={`rounded-full px-3 py-1 text-xs ${record.reviewed ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"}`}
-                                onClick={() => toggleReviewed(record)}
-                              >
-                                {record.reviewed ? "✓ Reviewed" : "Mark Reviewed"}
-                              </button>
-                              <button
-                                className="rounded-full bg-rose-50 px-3 py-1 text-xs text-rose-600"
-                                onClick={() => deleteEntry(record)}
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      {isSelected && (
-                          <tr>
-                            <td colSpan={6} className="px-4 py-4 bg-slate-50 border-t border-slate-200">
-                              {renderEntryDetail(record)}
+                                {record.reviewed && (
+                                  <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">
+                                    ✓ Reviewed
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  className="rounded-full bg-slate-100 px-3 py-1 text-xs"
+                                  onClick={() => setSelectedEntry(isSelected ? null : record)}
+                                >
+                                  {isSelected ? "Close" : "View"}
+                                </button>
+                                <button
+                                  className={`rounded-full px-3 py-1 text-xs ${record.reviewed ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"}`}
+                                  onClick={() => toggleReviewed(record)}
+                                >
+                                  {record.reviewed ? "✓ Reviewed" : "Mark Reviewed"}
+                                </button>
+                                <button
+                                  className="rounded-full bg-rose-50 px-3 py-1 text-xs text-rose-600"
+                                  onClick={() => deleteEntry(record)}
+                                >
+                                  Delete
+                                </button>
+                              </div>
                             </td>
                           </tr>
-                        )}
-                      </React.Fragment>
+                          {isSelected && (
+                            <tr>
+                              <td colSpan={6} className="px-4 py-4 bg-slate-50 border-t border-slate-200">
+                                {renderEntryDetail(record)}
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       );
                     })}
                 </tbody>
               </table>
             </div>
-              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-slate-700">Entry Details</h3>
-                  <button className="text-sm text-slate-500" onClick={() => setSelectedEntry(null)}>Close</button>
-                </div>
-                {renderEntryDetail(selectedEntry)}
-              </div>
             )}
           {showDeletedSubmissions && (
             <div className="mt-6">
