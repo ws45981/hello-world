@@ -1031,9 +1031,9 @@ export default function WorkLogApp() {
                             <div className="flex flex-wrap gap-2">
                               <button
                                 className="rounded-full bg-slate-100 px-3 py-1 text-xs"
-                                onClick={() => setSelectedDeletedEntry(selectedDeletedEntry?.id === record.id ? null : record)}
+                                onClick={() => setSelectedEntry(selectedEntry?.id === record.id ? null : record)}
                               >
-                                {selectedDeletedEntry?.id === record.id ? "Close" : "View"}
+                                {selectedEntry?.id === record.id ? "Close" : "View"}
                               </button>
                               <button
                                 className={`rounded-full px-3 py-1 text-xs ${record.reviewed ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"}`}
