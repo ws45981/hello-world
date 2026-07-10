@@ -1050,18 +1050,20 @@ export default function WorkLogApp() {
                             </div>
                           </td>
                         </tr>
-                        {selectedEntry?.id === record.id && (
-                          <tr>
-                            <td colSpan={6} className="px-4 py-4 bg-slate-50 border-t border-slate-200">
-                              <p>Test - entry detail should show here</p>
-                            </td>
-                          </tr>
-                        )}
                       </>
                     ))}
                 </tbody>
               </table>
             </div>
+            {selectedEntry && (
+              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-slate-700">Entry Details</h3>
+                  <button className="text-sm text-slate-500" onClick={() => setSelectedEntry(null)}>Close</button>
+                </div>
+                {renderEntryDetail(selectedEntry)}
+              </div>
+            )}
           {showDeletedSubmissions && (
             <div className="mt-6">
               <h3 className="text-lg font-semibold text-slate-700 mb-3">Deleted Submissions</h3>
