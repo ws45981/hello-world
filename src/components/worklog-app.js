@@ -274,6 +274,26 @@ export default function WorkLogApp() {
   const startEdit = (entry) => {
     const safeEntry = {
       ...entry,
+      // Map database column names to form field names
+      phiRequested: entry.phi_requested || "",
+      communicationMethod: entry.communication_method || "",
+      otherCommunicationMethod: entry.other_communication_method || "",
+      informationProvided: entry.information_provided || "",
+      scheduledTime: entry.scheduled_time || "",
+      arrivalTime: entry.arrival_time || "",
+      noReasonProvided: entry.no_reason_provided || false,
+      statedReason: entry.stated_reason || "",
+      communicationReceived: entry.communication_received ?? null,
+      communicationDetails: entry.communication_details || "",
+      scheduledUntil: entry.scheduled_until || "",
+      requestGranted: entry.request_granted ?? null,
+      denialReason: entry.denial_reason || "",
+      departureTime: entry.departure_time || "",
+      categoryDescription: entry.category_description || "",
+      additionalDetails: entry.additional_details === "N/A" ? "" : (entry.additional_details || ""),
+      additionalDetailsNA: entry.additional_details === "N/A",
+      involvedPartiesNA: !entry.involved_parties || entry.involved_parties?.length === 0,
+      witnessesNA: !entry.witnesses || entry.witnesses?.length === 0,
       involvedParties: Array.isArray(entry.involved_parties)
         ? entry.involved_parties
         : typeof entry.involved_parties === "string"
@@ -289,6 +309,11 @@ export default function WorkLogApp() {
         : typeof entry.attachments === "string"
         ? JSON.parse(entry.attachments || "[]")
         : [],
+      storageType: entry.storage_type || "",
+      storageLocation: entry.storage_location || "",
+      itemReplaced: entry.item_replaced ?? null,
+      replacementStorageType: entry.replacement_storage_type || "",
+      replacementStorageLocation: entry.replacement_storage_location || "",
     };
     setEditingData(safeEntry);
     setActiveCategory(entry.category);
