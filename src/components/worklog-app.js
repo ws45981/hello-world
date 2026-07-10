@@ -40,6 +40,7 @@ export default function WorkLogApp() {
   const [forcePasswordChange, setForcePasswordChange] = useState(false);
   const [showDeletedSubmissions, setShowDeletedSubmissions] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+  const [selectedDeletedEntry, setSelectedDeletedEntry] = useState(null);
 
   useEffect(() => {
     const loadSession = async () => {
@@ -1030,9 +1031,9 @@ export default function WorkLogApp() {
                             <div className="flex flex-wrap gap-2">
                               <button
                                 className="rounded-full bg-slate-100 px-3 py-1 text-xs"
-                                onClick={() => setSelectedEntry(selectedEntry?.id === record.id ? null : record)}
+                                onClick={() => setSelectedDeletedEntry(selectedDeletedEntry?.id === record.id ? null : record)}
                               >
-                                {selectedEntry?.id === record.id ? "Close" : "View"}
+                                {selectedDeletedEntry?.id === record.id ? "Close" : "View"}
                               </button>
                               <button
                                 className={`rounded-full px-3 py-1 text-xs ${record.reviewed ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"}`}
@@ -1093,6 +1094,19 @@ export default function WorkLogApp() {
                                 {selectedEntry?.id === record.id ? "Close" : "View"}
                               </button>
                               <button
+                                className="rounded-full bg-emerald-100 px-3 py-1 text-xs text-emerald-700 font-medium"
+                                onClick={async () => {
+                                  const supabase = getSupabaseClient();
+                                  if (isSupabaseConfigured() && supabase) {
+                                    await supabase.from("incident_entries").update({ status: "active" }).eq("id", record.id);
+                                  }
+                                  setRecords((current) => current.map((r) => r.id === record.id ? { ...r, status: "active" } : r));
+                                  setMessage("Entry restored successfully.");
+                                }}
+                              >
+                                Restore
+                              </button>
+                              <button
                                 className="rounded-full bg-rose-100 px-3 py-1 text-xs text-rose-700 font-medium"
                                 onClick={() => permanentlyDelete(record.id)}
                               >
@@ -1102,6 +1116,13 @@ export default function WorkLogApp() {
                           </td>
                         </tr>
                       ))}
+                    {selectedDeletedEntry && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-4 bg-slate-50 border-t border-rose-100">
+                          {renderEntryDetail(selectedDeletedEntry)}
+                        </td>
+                      </tr>
+                    )}
                     {records.filter((r) => r.status === "deleted" && !r.permanently_deleted).length === 0 && (
                       <tr>
                         <td colSpan={5} className="px-3 py-4 text-sm text-slate-500 text-center">No deleted submissions.</td>
