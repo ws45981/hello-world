@@ -167,6 +167,8 @@ export default function WorkLogApp() {
     setError("");
     setMessage("");
     if (!user || !profile) return;
+    console.log("editingData:", editingData);
+    console.log("formData.id:", formData.id);
 
     const standardCategories = ["General Comments", "General Policy Violation", "Safety", "Status Quo", "Rude/Bullying/Intimidation", "Rule Violation", "Questions/Clarification", "Reminder", "Other"];
     if (standardCategories.includes(formData.category || activeCategory)) {
