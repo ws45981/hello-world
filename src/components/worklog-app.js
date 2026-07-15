@@ -1106,22 +1106,45 @@ export default function WorkLogApp() {
                 👤 {profile?.full_name || user.email}
               </button>
               {showAccountMenu && (
-                <div className="absolute right-0 top-12 z-50 w-72 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+                // text-slate-900 stops the header's text-white cascading in. The
+                // panel sits inside <header className="... text-white">, which is
+                // why the inputs rendered white text on a white background.
+                <div className="absolute right-0 top-12 z-50 w-72 rounded-xl border border-slate-200 bg-white p-4 text-slate-900 shadow-xl">
                   <p className="text-sm font-medium text-slate-700 mb-3">Change Password</p>
-                  <input
-                    type="password"
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm mb-2"
-                    placeholder="New password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                  />
-                  <input
-                    type="password"
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm mb-2"
-                    placeholder="Confirm new password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                  />
+                  <div className="mb-2">
+                    <label
+                      htmlFor="account-new-password"
+                      className="mb-1 block text-xs font-medium text-slate-600"
+                    >
+                      New Password
+                    </label>
+                    <input
+                      id="account-new-password"
+                      type="password"
+                      autoComplete="new-password"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                      placeholder="Enter new password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                    />
+                  </div>
+                  <div className="mb-2">
+                    <label
+                      htmlFor="account-confirm-password"
+                      className="mb-1 block text-xs font-medium text-slate-600"
+                    >
+                      Confirm New Password
+                    </label>
+                    <input
+                      id="account-confirm-password"
+                      type="password"
+                      autoComplete="new-password"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                      placeholder="Re-enter new password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                    />
+                  </div>
                   {passwordError && <p className="text-xs text-rose-600 mb-2">{passwordError}</p>}
                   {passwordSuccess && <p className="text-xs text-emerald-600 mb-2">{passwordSuccess}</p>}
                   <button
