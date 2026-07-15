@@ -51,6 +51,10 @@ export default function WorkLogApp() {
   const [groupForm, setGroupForm] = useState({ title: "", date: "", time: "" });
   const [addToGroupId, setAddToGroupId] = useState(null);
   const [deleteGroupConfirm, setDeleteGroupConfirm] = useState(null);
+  // Reported inside the Create Group dialog. The page-level error banner renders
+  // behind the modal overlay, so a failure there is invisible until it closes.
+  const [groupError, setGroupError] = useState("");
+  const [groupSaving, setGroupSaving] = useState(false);
 
   const loadRecords = async (userProfile) => {
     const supabase = getSupabaseClient();
@@ -486,15 +490,20 @@ export default function WorkLogApp() {
   };
 
   const createGroup = async () => {
-    setError("");
+    setGroupError("");
     if (!groupForm.title.trim()) {
-      setError("Group title is required.");
+      setGroupError("Group title is required.");
       return;
     }
     const supabase = getSupabaseClient();
-    if (!isSupabaseConfigured() || !supabase) return;
+    if (!isSupabaseConfigured() || !supabase) {
+      setGroupError("Supabase is not configured, so the group cannot be saved.");
+      return;
+    }
 
-    const { data: group, error: groupError } = await supabase
+    setGroupSaving(true);
+
+    const { data: group, error: insertError } = await supabase
       .from("incident_groups")
       .insert({
         title: groupForm.title.trim(),
@@ -505,8 +514,9 @@ export default function WorkLogApp() {
       .select()
       .single();
 
-    if (groupError) {
-      setError(groupError.message);
+    if (insertError) {
+      setGroupSaving(false);
+      setGroupError(insertError.message);
       return;
     }
 
@@ -516,12 +526,17 @@ export default function WorkLogApp() {
       .select();
 
     if (linkError) {
-      setError(linkError.message);
+      // The group row already landed. Leaving it would strand an empty group
+      // that was never asked for, so undo it before reporting.
+      await supabase.from("incident_groups").delete().eq("id", group.id);
+      setGroupSaving(false);
+      setGroupError(`Could not add submissions to the group: ${linkError.message}`);
       return;
     }
 
     setGroups((current) => [group, ...current]);
     setGroupEntries((current) => [...current, ...(links || [])]);
+    setGroupSaving(false);
     setShowCreateGroup(false);
     setGroupForm({ title: "", date: "", time: "" });
     exitGroupingMode();
@@ -1236,7 +1251,7 @@ export default function WorkLogApp() {
                   ) : (
                     <button
                       className="rounded-xl bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-700"
-                      onClick={() => setShowCreateGroup(true)}
+                      onClick={() => { setGroupError(""); setShowCreateGroup(true); }}
                     >
                       Create Group ({selectedForGroup.length})
                     </button>
@@ -1531,17 +1546,24 @@ export default function WorkLogApp() {
                 </div>
               </div>
             </div>
+            {groupError && (
+              <p className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                🚫 {groupError}
+              </p>
+            )}
+
             <div className="mt-5 flex flex-col gap-2">
               <button
                 className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-700 disabled:bg-slate-300"
-                disabled={!groupForm.title.trim()}
+                disabled={!groupForm.title.trim() || groupSaving}
                 onClick={createGroup}
               >
-                Create Group
+                {groupSaving ? "Creating..." : "Create Group"}
               </button>
               <button
                 className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-500 hover:bg-slate-50"
-                onClick={() => setShowCreateGroup(false)}
+                disabled={groupSaving}
+                onClick={() => { setShowCreateGroup(false); setGroupError(""); }}
               >
                 Cancel
               </button>
