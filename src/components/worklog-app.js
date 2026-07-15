@@ -97,6 +97,8 @@ export default function WorkLogApp() {
 
   const handleLogin = async (authUser) => {
     const userProfile = await getUserProfile(authUser.id);
+    console.log("Auth user ID:", authUser.id);
+    console.log("User profile:", userProfile);
     setUser(authUser);
     setProfile(userProfile);
     if (!userProfile?.password_changed) {
