@@ -51,7 +51,7 @@ const makeEmptyForm = () => ({
   attachments: [],
 });
 
-export default function PHIForm({ categories, user, onSubmit, onFileUpload, editingData, onCancelEdit }) {
+export default function PHIForm({ categories, user, onSubmit, uploading, onFileUpload, editingData, onCancelEdit }) {
   const [form, setForm] = useState(editingData || makeEmptyForm());
 
   const handleInvolvedPartiesUpdate = (newEntry, replacedList) => {
@@ -243,9 +243,10 @@ export default function PHIForm({ categories, user, onSubmit, onFileUpload, edit
       <div className="flex flex-wrap gap-3">
         <button
           type="submit"
-          className="rounded-xl bg-slate-900 px-6 py-3 font-semibold text-white hover:bg-slate-700"
+          disabled={uploading}
+          className="rounded-xl bg-slate-900 px-6 py-3 font-semibold text-white hover:bg-slate-700 disabled:bg-slate-300"
         >
-          {editingData ? "Save Changes" : "Submit Incident"}
+          {uploading ? "Waiting for upload..." : editingData ? "Save Changes" : "Submit Incident"}
         </button>
         {editingData && (
           <button

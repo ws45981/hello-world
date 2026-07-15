@@ -212,6 +212,16 @@ export default function WorkLogApp() {
     setMessage("");
     if (!user || !profile) return;
 
+    // The disabled Submit button covers the click, but pressing Enter in a
+    // single-line field submits the form regardless. Every form routes through
+    // here, so this is the one place that actually closes the gap: submitting
+    // mid-upload would save the entry without the attachment, which for an
+    // incident record is a silent loss of evidence.
+    if (uploading) {
+      setError("Please wait for the attachment upload to finish before submitting.");
+      return;
+    }
+
     const standardCategories = ["General Comments", "General Policy Violation", "Safety", "Status Quo", "Rude/Bullying/Intimidation", "Rule Violation", "Questions/Clarification", "Reminder", "Other"];
     if (standardCategories.includes(formData.category || activeCategory)) {
       if (!formData.description?.trim()) {
