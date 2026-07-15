@@ -76,4 +76,3 @@ export async function getUserProfile(userId) {
   console.log("getUserProfile result:", data);
   return data;
 }
-}
