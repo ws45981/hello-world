@@ -64,6 +64,7 @@ export async function getUserProfile(userId) {
         id: userId,
         employee_id: userId,
         full_name: authUser?.email || 'Unknown User',
+        email: authUser?.email || null,
         role: 'general_user',
         password_changed: false,
       })

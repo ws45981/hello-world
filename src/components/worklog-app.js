@@ -14,6 +14,7 @@ import MissingExpiringForm from "@/components/forms/MissingExpiringForm";
 import QuestionsClarificationForm from "@/components/forms/QuestionsClarificationForm";
 import ReminderForm from "@/components/forms/ReminderForm";
 import { locationTextClass } from "@/components/forms/LocationSelector";
+import UserManagement from "@/components/admin/UserManagement";
 
 export default function WorkLogApp() {
   const [user, setUser] = useState(null);
@@ -808,6 +809,12 @@ export default function WorkLogApp() {
                 >
                   Categories
                 </button>
+                <button
+                  onClick={() => setViewMode("users")}
+                  className={`rounded-lg px-4 py-2 text-sm font-medium ${viewMode === "users" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+                >
+                  Users
+                </button>
               </>
             )}
           </div>
@@ -1173,6 +1180,19 @@ export default function WorkLogApp() {
             >
               + Add Category
             </button>
+          </section>
+        )}
+
+        {viewMode === "users" && profile?.role === ROLES.MASTER_ADMIN && (
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-4">
+              <p className="text-sm font-medium text-slate-500">Administrative</p>
+              <h2 className="text-2xl font-semibold">User Management</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Set each user&apos;s role, and untick any category you want to hide from them.
+              </p>
+            </div>
+            <UserManagement currentUserId={profile.id} />
           </section>
         )}
       </main>
