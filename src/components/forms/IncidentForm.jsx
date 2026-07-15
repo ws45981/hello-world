@@ -3,6 +3,7 @@
 import { useState } from "react";
 import PersonnelSelector from "./PersonnelSelector";
 import DateTimePicker from "./DateTimePicker";
+import LocationSelector from "./LocationSelector";
 
 const formatDateInput = (value) => {
   const date = value instanceof Date ? value : new Date(value);
@@ -26,6 +27,7 @@ const makeEmptyForm = (category = "") => ({
   time: formatTimeInput(new Date()),
   category,
   categoryDescription: "",
+  location: "",
   description: "",
   involvedParties: [],
   involvedPartiesNA: false,
@@ -75,6 +77,12 @@ export default function IncidentForm({ category, categories, user, onSubmit, upl
         time={form.time}
         onDateChange={(val) => setForm((f) => ({ ...f, date: val }))}
         onTimeChange={(val) => setForm((f) => ({ ...f, time: val }))}
+      />
+
+      {/* Location */}
+      <LocationSelector
+        value={form.location}
+        onChange={(val) => setForm((f) => ({ ...f, location: val }))}
       />
 
       {form.category === "Other" && (

@@ -13,6 +13,7 @@ import SupplyNeedForm from "@/components/forms/SupplyNeedForm";
 import MissingExpiringForm from "@/components/forms/MissingExpiringForm";
 import QuestionsClarificationForm from "@/components/forms/QuestionsClarificationForm";
 import ReminderForm from "@/components/forms/ReminderForm";
+import { locationTextClass } from "@/components/forms/LocationSelector";
 
 export default function WorkLogApp() {
   const [user, setUser] = useState(null);
@@ -543,7 +544,7 @@ export default function WorkLogApp() {
         {entry.location && (
           <div>
             <p className="text-sm font-medium text-slate-500">Location</p>
-            <p className={entry.location === "SFOT" ? "text-red-600 font-semibold" : "text-blue-600 font-semibold"}>
+            <p className={locationTextClass(entry.location)}>
               {entry.location}
             </p>
           </div>

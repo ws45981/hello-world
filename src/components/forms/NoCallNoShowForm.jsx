@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import DateTimePicker from "./DateTimePicker";
+import LocationSelector from "./LocationSelector";
 
 const formatDateInput = (value) => {
   const date = value instanceof Date ? value : new Date(value);
@@ -24,6 +25,7 @@ const makeEmptyForm = () => ({
   date: formatDateInput(new Date()),
   time: formatTimeInput(new Date()),
   category: "No Call, No Show",
+  location: "",
   involvedParties: [],
   scheduledTime: "",
   communicationReceived: null,
@@ -64,7 +66,11 @@ export default function NoCallNoShowForm({ user, onSubmit, editingData, onCancel
         onTimeChange={(val) => setForm((f) => ({ ...f, time: val }))}
       />
 
-      {/* Select Person */}
+      {/* Location */}
+      <LocationSelector
+        value={form.location}
+        onChange={(val) => setForm((f) => ({ ...f, location: val }))}
+      />
 
       {/* Select Person */}
       <div>

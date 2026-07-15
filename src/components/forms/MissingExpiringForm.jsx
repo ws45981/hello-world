@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import DateTimePicker from "./DateTimePicker";
+import LocationSelector, { hasSite, locationTextClass } from "./LocationSelector";
 
 const formatDateInput = (value) => {
   const date = value instanceof Date ? value : new Date(value);
@@ -100,6 +101,7 @@ export default function MissingExpiringForm({ user, onSubmit, uploading, onFileU
   };
 
   const getStorageOptions = (storageType) => {
+    if (!hasSite(form.location)) return [];
     if (storageType === "Stock Room") {
       return form.location === "SFOT" ? SFOT_STOCK_ROOMS : HHA_STOCK_ROOMS;
     }
@@ -109,11 +111,7 @@ export default function MissingExpiringForm({ user, onSubmit, uploading, onFileU
     return [];
   };
 
-  const locationColor = form.location === "SFOT"
-    ? "text-red-600 font-semibold"
-    : form.location === "HHA"
-    ? "text-blue-600 font-semibold"
-    : "";
+  const locationColor = locationTextClass(form.location);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -127,38 +125,13 @@ export default function MissingExpiringForm({ user, onSubmit, uploading, onFileU
       />
 
       {/* Location */}
-
-      {/* Location */}
-      <div>
-        <label className="mb-2 block text-sm font-medium text-slate-700">Location</label>
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => setForm((f) => ({ ...f, location: "SFOT", storageType: "", storageLocation: "", replacementStorageType: "", replacementStorageLocation: "" }))}
-            className={`flex-1 rounded-xl border px-4 py-3 text-sm font-semibold transition-colors ${
-              form.location === "SFOT"
-                ? "border-red-600 bg-red-600 text-white"
-                : "border-slate-300 text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            SFOT
-          </button>
-          <button
-            type="button"
-            onClick={() => setForm((f) => ({ ...f, location: "HHA", storageType: "", storageLocation: "", replacementStorageType: "", replacementStorageLocation: "" }))}
-            className={`flex-1 rounded-xl border px-4 py-3 text-sm font-semibold transition-colors ${
-              form.location === "HHA"
-                ? "border-blue-600 bg-blue-600 text-white"
-                : "border-slate-300 text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            HHA
-          </button>
-        </div>
-      </div>
+      <LocationSelector
+        value={form.location}
+        onChange={(val) => setForm((f) => ({ ...f, location: val, storageType: "", storageLocation: "", replacementStorageType: "", replacementStorageLocation: "" }))}
+      />
 
       {/* Storage Type */}
-      {form.location && (
+      {hasSite(form.location) && (
         <div>
           <label className="mb-2 block text-sm font-medium text-slate-700">
             Where was the item located? <span className={locationColor}>({form.location})</span>
@@ -254,7 +227,7 @@ export default function MissingExpiringForm({ user, onSubmit, uploading, onFileU
       </div>
 
       {/* Replacement Location */}
-      {form.itemReplaced === true && form.location && (
+      {form.itemReplaced === true && hasSite(form.location) && (
         <>
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">

@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import DateTimePicker from "./DateTimePicker";
+import LocationSelector from "./LocationSelector";
 
 const makeEmptyForm = () => ({
   date: new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" }),
   time: new Date().toLocaleTimeString("en-CA", { hour12: false, timeZone: "America/Chicago", hour: "2-digit", minute: "2-digit" }),
   category: "Request to Leave Early",
+  location: "",
   involvedParties: [],
   scheduledUntil: "",
   requestGranted: null,
@@ -40,6 +42,12 @@ export default function RequestToLeaveForm({ user, onSubmit, editingData, onCanc
         time={form.time}
         onDateChange={(val) => setForm((f) => ({ ...f, date: val }))}
         onTimeChange={(val) => setForm((f) => ({ ...f, time: val }))}
+      />
+
+      {/* Location */}
+      <LocationSelector
+        value={form.location}
+        onChange={(val) => setForm((f) => ({ ...f, location: val }))}
       />
 
       {/* Select Person */}

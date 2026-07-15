@@ -3,6 +3,8 @@
 import { useState } from "react";
 import PersonnelSelector from "./PersonnelSelector";
 import DateTimePicker from "./DateTimePicker";
+import LocationSelector from "./LocationSelector";
+
 const formatDateInput = (value) => {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "";
@@ -33,6 +35,7 @@ const makeEmptyForm = () => ({
   date: formatDateInput(new Date()),
   time: formatTimeInput(new Date()),
   category: "PHI",
+  location: "",
   phiRequested: "",
   communicationMethod: "",
   otherCommunicationMethod: "",
@@ -79,6 +82,12 @@ export default function PHIForm({ categories, user, onSubmit, uploading, onFileU
         time={form.time}
         onDateChange={(val) => setForm((f) => ({ ...f, date: val }))}
         onTimeChange={(val) => setForm((f) => ({ ...f, time: val }))}
+      />
+
+      {/* Location */}
+      <LocationSelector
+        value={form.location}
+        onChange={(val) => setForm((f) => ({ ...f, location: val }))}
       />
 
       {/* PHI Requested */}

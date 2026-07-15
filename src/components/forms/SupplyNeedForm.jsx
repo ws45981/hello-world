@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import DateTimePicker from "./DateTimePicker";
+import LocationSelector, { hasSite, locationTextClass } from "./LocationSelector";
 
 const formatDateInput = (value) => {
   const date = value instanceof Date ? value : new Date(value);
@@ -97,6 +98,7 @@ export default function SupplyNeedForm({ user, onSubmit, uploading, onFileUpload
   };
 
   const getStorageOptions = () => {
+    if (!hasSite(form.location)) return [];
     if (form.storageType === "Stock Room") {
       return form.location === "SFOT" ? SFOT_STOCK_ROOMS : HHA_STOCK_ROOMS;
     }
@@ -106,7 +108,7 @@ export default function SupplyNeedForm({ user, onSubmit, uploading, onFileUpload
     return [];
   };
 
-  const locationColor = form.location === "SFOT" ? "text-red-600 font-semibold" : form.location === "HHA" ? "text-blue-600 font-semibold" : "";
+  const locationColor = locationTextClass(form.location);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -120,36 +122,13 @@ export default function SupplyNeedForm({ user, onSubmit, uploading, onFileUpload
       />
 
       {/* Location */}
-      <div>
-        <label className="mb-2 block text-sm font-medium text-slate-700">Location</label>
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => setForm((f) => ({ ...f, location: "SFOT", storageType: "", storageLocation: "" }))}
-            className={`flex-1 rounded-xl border px-4 py-3 text-sm font-semibold transition-colors ${
-              form.location === "SFOT"
-                ? "border-red-600 bg-red-600 text-white"
-                : "border-slate-300 text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            SFOT
-          </button>
-          <button
-            type="button"
-            onClick={() => setForm((f) => ({ ...f, location: "HHA", storageType: "", storageLocation: "" }))}
-            className={`flex-1 rounded-xl border px-4 py-3 text-sm font-semibold transition-colors ${
-              form.location === "HHA"
-                ? "border-blue-600 bg-blue-600 text-white"
-                : "border-slate-300 text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            HHA
-          </button>
-        </div>
-      </div>
+      <LocationSelector
+        value={form.location}
+        onChange={(val) => setForm((f) => ({ ...f, location: val, storageType: "", storageLocation: "" }))}
+      />
 
       {/* Storage Type */}
-      {form.location && (
+      {hasSite(form.location) && (
         <div>
           <label className="mb-2 block text-sm font-medium text-slate-700">
             Where is the supply needed? <span className={locationColor}>({form.location})</span>
