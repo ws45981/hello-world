@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { getSupabaseClient, isSupabaseConfigured, signOut, getCurrentUser, getUserProfile } from "@/lib/supabase";
+import { getSupabaseClient, isSupabaseConfigured, signOut, getCurrentUser, getUserProfile, toAttachmentPath, ATTACHMENT_BUCKET } from "@/lib/supabase";
+import AttachmentLink from "@/components/AttachmentLink";
 import { CATEGORIES, ROLES, GENERAL_USER_RESTRICTED_CATEGORIES } from "@/lib/constants";
 import LoginForm from "@/components/auth/LoginForm";
 import IncidentForm from "@/components/forms/IncidentForm";
@@ -295,9 +296,13 @@ export default function WorkLogApp() {
 
   };
 
-  // Takes a list of File objects and resolves to the URLs that uploaded cleanly.
-  // A failure on one file is reported but does not abandon the rest, so the
-  // returned array can be shorter than the input.
+  // Takes a list of File objects and resolves to the object paths that uploaded
+  // cleanly. A failure on one file is reported but does not abandon the rest, so
+  // the returned array can be shorter than the input.
+  //
+  // Paths are stored, never URLs: the bucket is private, and the signed URLs that
+  // replace public ones expire — persisting one would leave a dead link an hour
+  // later. AttachmentLink signs a fresh URL whenever an attachment is displayed.
   const handleFileUpload = async (files) => {
     const list = Array.from(files || []);
     if (list.length === 0 || !user) return [];
@@ -311,16 +316,18 @@ export default function WorkLogApp() {
     }
 
     const stamp = Date.now();
-    const urls = [];
+    const paths = [];
     const failures = [];
 
     for (let i = 0; i < list.length; i += 1) {
       const file = list[i];
-      // The index keeps paths distinct: several files picked at once would
-      // otherwise share a millisecond, collide, and fail against upsert: false.
+      // The leading profile.id is load-bearing: the storage policies scope access
+      // by the first folder segment. The index keeps paths distinct, since files
+      // picked together would otherwise share a millisecond, collide, and fail
+      // against upsert: false.
       const filePath = `${profile.id}/${stamp}-${i}-${file.name}`;
       const { error: uploadError } = await supabase.storage
-        .from("incident-attachments")
+        .from(ATTACHMENT_BUCKET)
         .upload(filePath, file, { upsert: false });
 
       if (uploadError) {
@@ -329,10 +336,7 @@ export default function WorkLogApp() {
         continue;
       }
 
-      const { data: publicUrlData } = supabase.storage
-        .from("incident-attachments")
-        .getPublicUrl(filePath);
-      urls.push(publicUrlData.publicUrl);
+      paths.push(filePath);
     }
 
     setUploading(false);
@@ -340,11 +344,11 @@ export default function WorkLogApp() {
     if (failures.length > 0) {
       setError(`Upload failed — ${failures.join("; ")}`);
     }
-    if (urls.length > 0) {
-      setMessage(`${urls.length} attachment${urls.length === 1 ? "" : "s"} uploaded successfully.`);
+    if (paths.length > 0) {
+      setMessage(`${paths.length} attachment${paths.length === 1 ? "" : "s"} uploaded successfully.`);
     }
 
-    return urls;
+    return paths;
   };
 
   const startEdit = (entry) => {
@@ -409,11 +413,12 @@ export default function WorkLogApp() {
     if (isSupabaseConfigured() && supabase) {
       // Delete attachments from storage if requested
       if (deleteAttachments && entry.attachments?.length > 0) {
-        for (const url of entry.attachments) {
+        for (const value of entry.attachments) {
           try {
-            const path = url.split("/incident-attachments/")[1];
+            // Handles both the stored path and the legacy full public URL.
+            const path = toAttachmentPath(value);
             if (path) {
-              await supabase.storage.from("incident-attachments").remove([path]);
+              await supabase.storage.from(ATTACHMENT_BUCKET).remove([path]);
             }
           } catch (e) {
             console.error("Error deleting attachment:", e);
@@ -987,7 +992,7 @@ export default function WorkLogApp() {
             <ul className="mt-1 space-y-1">
               {entry.attachments.map((a, i) => (
                 <li key={i} className="text-sm">
-                  📎 <a href={a} target="_blank" rel="noreferrer" className="text-blue-600 underline">{a}</a>
+                  <AttachmentLink value={a} className="text-blue-600 underline" />
                 </li>
               ))}
             </ul>

@@ -23,6 +23,44 @@ export function getSupabaseClient() {
   return client;
 }
 
+export const ATTACHMENT_BUCKET = 'incident-attachments';
+
+// 60 minutes. Long enough to open a document, short enough that a leaked link
+// stops working quickly.
+export const SIGNED_URL_TTL_SECONDS = 60 * 60;
+
+// The attachments column stores object paths. Rows written while the bucket was
+// public stored a full public URL instead, so both shapes have to be accepted.
+export function toAttachmentPath(value) {
+  if (!value) return value;
+  const marker = `/${ATTACHMENT_BUCKET}/`;
+  const index = value.indexOf(marker);
+  return index === -1 ? value : value.slice(index + marker.length);
+}
+
+export function attachmentDisplayName(value) {
+  const path = toAttachmentPath(value) || '';
+  try {
+    return decodeURIComponent(path.split('/').pop().split('?')[0]);
+  } catch {
+    return path;
+  }
+}
+
+// Signed URLs expire, so one is minted per view and never persisted. Storing one
+// would leave a dead link in the database an hour later.
+export async function createAttachmentSignedUrl(value, expiresIn = SIGNED_URL_TTL_SECONDS) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return { url: null, error: 'Supabase is not configured' };
+
+  const { data, error } = await supabase.storage
+    .from(ATTACHMENT_BUCKET)
+    .createSignedUrl(toAttachmentPath(value), expiresIn);
+
+  if (error) return { url: null, error: error.message };
+  return { url: data.signedUrl, error: null };
+}
+
 export async function signInWithEmail(email, password) {
   const supabase = getSupabaseClient();
   if (!supabase) return { error: 'Supabase not configured' };

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import AttachmentLink from "@/components/AttachmentLink";
 
 const DOCUMENT_ACCEPT = "image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt";
 const IMAGE_ACCEPT = "image/*";
@@ -17,16 +18,6 @@ const formatBytes = (bytes) => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-};
-
-// Attachments are stored as public URLs; show the trailing filename rather than
-// the whole URL.
-const displayName = (url) => {
-  try {
-    return decodeURIComponent(url.split("/").pop().split("?")[0]);
-  } catch {
-    return url;
-  }
 };
 
 export default function AttachmentPicker({ attachments = [], onFileUpload, onAdd }) {
@@ -173,17 +164,12 @@ export default function AttachmentPicker({ attachments = [], onFileUpload, onAdd
 
       {attachments.length > 0 && (
         <ul className="mt-3 space-y-1 text-sm text-slate-600">
-          {attachments.map((url, i) => (
-            <li key={`${url}-${i}`} className="truncate">
-              📎{" "}
-              <a
-                href={url}
-                target="_blank"
-                rel="noreferrer"
+          {attachments.map((value, i) => (
+            <li key={`${value}-${i}`} className="truncate">
+              <AttachmentLink
+                value={value}
                 className="text-slate-700 underline hover:text-slate-900"
-              >
-                {displayName(url)}
-              </a>
+              />
             </li>
           ))}
         </ul>
