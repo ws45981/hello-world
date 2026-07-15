@@ -97,8 +97,6 @@ export default function WorkLogApp() {
 
   const handleLogin = async (authUser) => {
     const userProfile = await getUserProfile(authUser.id);
-    console.log("Auth user ID:", authUser.id);
-    console.log("User profile:", userProfile);
     setUser(authUser);
     setProfile(userProfile);
     if (!userProfile?.password_changed) {
@@ -174,8 +172,6 @@ export default function WorkLogApp() {
     setError("");
     setMessage("");
     if (!user || !profile) return;
-    console.log("editingData:", editingData);
-    console.log("formData.id:", formData.id);
 
     const standardCategories = ["General Comments", "General Policy Violation", "Safety", "Status Quo", "Rude/Bullying/Intimidation", "Rule Violation", "Questions/Clarification", "Reminder", "Other"];
     if (standardCategories.includes(formData.category || activeCategory)) {
@@ -1102,7 +1098,7 @@ export default function WorkLogApp() {
                             <div className="flex gap-2">
                               <button
                                 className="rounded-full bg-slate-100 px-3 py-1 text-xs"
-                                onClick={() => { console.log("record.id:", record.id); console.log("selectedEntry:", selectedEntry); setSelectedEntry(selectedEntry?.id === record.id ? null : record); }}
+                                onClick={() => setSelectedEntry(selectedEntry?.id === record.id ? null : record)}
                               >
                                 {selectedEntry?.id === record.id ? "Close" : "View"}
                               </button>

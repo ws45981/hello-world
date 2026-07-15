@@ -47,32 +47,48 @@ export async function getUserProfile(userId) {
   const supabase = getSupabaseClient();
   if (!supabase) return null;
   
+  // maybeSingle() returns data: null for "no such row" rather than raising, which
+  // keeps a missing profile distinguishable from a genuine failure below.
   const { data, error } = await supabase
     .from('user_profiles')
     .select('*')
-    .eq('id', userId.toString())
-    .single();
-  
-  if (error || !data) {
-    // Auto-create profile if it doesn't exist
-    // Get the user's email to use as fallback name
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    
-    const { data: newProfile } = await supabase
-      .from('user_profiles')
-      .insert({
-        id: userId,
-        employee_id: userId,
-        full_name: authUser?.email || 'Unknown User',
-        email: authUser?.email || null,
-        role: 'general_user',
-        password_changed: false,
-      })
-      .select()
-      .single();
-    return newProfile;
+    .eq('id', userId)
+    .maybeSingle();
+
+  // Treating every error as "profile missing" would send an RLS denial or a
+  // network blip down the auto-create path, where the insert then collides with
+  // the existing primary key and returns undefined — losing the real reason.
+  if (error) {
+    console.error('Failed to load user profile:', error.message);
+    return null;
   }
-  
-  console.log("getUserProfile result:", data);
-  return data;
+
+  if (data) return data;
+
+  // No profile row yet: create one for this user's first sign-in.
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+
+  // full_name is NOT NULL, so a new profile needs some placeholder. Deliberately
+  // not the email address: storing that makes the header look like it fell back
+  // to user.email when it is really rendering full_name, which is impossible to
+  // tell apart. A Master Admin can set the real name from the Users screen.
+  const { data: newProfile, error: insertError } = await supabase
+    .from('user_profiles')
+    .insert({
+      id: userId,
+      employee_id: userId,
+      full_name: 'Unknown User',
+      email: authUser?.email || null,
+      role: 'general_user',
+      password_changed: false,
+    })
+    .select()
+    .single();
+
+  if (insertError) {
+    console.error('Failed to create user profile:', insertError.message);
+    return null;
+  }
+
+  return newProfile;
 }

@@ -21,7 +21,10 @@ const sameCategories = (a = [], b = []) =>
 
 const draftFrom = (list) =>
   Object.fromEntries(
-    list.map((u) => [u.id, { role: u.role, excluded: u.excluded_categories || [] }]),
+    list.map((u) => [
+      u.id,
+      { fullName: u.full_name || "", role: u.role, excluded: u.excluded_categories || [] },
+    ]),
   );
 
 export default function UserManagement({ currentUserId }) {
@@ -82,6 +85,7 @@ export default function UserManagement({ currentUserId }) {
     const draft = drafts[user.id];
     if (!draft) return false;
     return (
+      draft.fullName !== (user.full_name || "") ||
       draft.role !== user.role ||
       !sameCategories(draft.excluded, user.excluded_categories || [])
     );
@@ -89,6 +93,15 @@ export default function UserManagement({ currentUserId }) {
 
   const saveUser = async (user) => {
     const draft = drafts[user.id];
+    const fullName = draft.fullName.trim();
+
+    // full_name is NOT NULL in the database, and an empty one would make the
+    // header silently fall back to the email address.
+    if (!fullName) {
+      setRowErrors((e) => ({ ...e, [user.id]: "Name cannot be empty." }));
+      return;
+    }
+
     setSavingId(user.id);
     setSavedId(null);
     setRowErrors((e) => ({ ...e, [user.id]: "" }));
@@ -96,7 +109,7 @@ export default function UserManagement({ currentUserId }) {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from("user_profiles")
-      .update({ role: draft.role, excluded_categories: draft.excluded })
+      .update({ full_name: fullName, role: draft.role, excluded_categories: draft.excluded })
       .eq("id", user.id)
       .select("id");
 
@@ -120,7 +133,7 @@ export default function UserManagement({ currentUserId }) {
     setUsers((list) =>
       list.map((u) =>
         u.id === user.id
-          ? { ...u, role: draft.role, excluded_categories: draft.excluded }
+          ? { ...u, full_name: fullName, role: draft.role, excluded_categories: draft.excluded }
           : u,
       ),
     );
@@ -156,11 +169,17 @@ export default function UserManagement({ currentUserId }) {
           <div key={user.id} className="rounded-xl border border-slate-200 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="font-medium text-slate-900">
-                  {user.full_name}
+                <label className="mb-1 block text-sm text-slate-600">
+                  Name
                   {isSelf && <span className="ml-2 text-xs text-slate-400">(you)</span>}
-                </p>
-                <p className="text-sm text-slate-500">{user.email || "— no email on file —"}</p>
+                </label>
+                <input
+                  className="w-64 max-w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                  value={draft.fullName}
+                  placeholder="Full name"
+                  onChange={(e) => updateDraft(user.id, { fullName: e.target.value })}
+                />
+                <p className="mt-1 text-sm text-slate-500">{user.email || "— no email on file —"}</p>
               </div>
 
               <div className="flex items-center gap-2">
