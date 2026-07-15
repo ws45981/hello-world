@@ -139,6 +139,16 @@ export default function AttachmentPicker({ attachments = [], onFileUpload, onAdd
         </div>
       )}
 
+      {/* Sits directly below the buttons / drop zone and clears itself when the
+          upload resolves, since `busy` is only true for the duration of the
+          await. Matters most on mobile, where uploads are slow enough that
+          submitting early looks like a finished form. */}
+      {busy && (
+        <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700">
+          ⏳ Upload in progress — please wait before submitting or adding another attachment.
+        </p>
+      )}
+
       {/* Files picked but not yet uploaded. */}
       {queue.length > 0 && (
         <ul className="mt-3 space-y-1">
