@@ -50,7 +50,7 @@ export async function getUserProfile(userId) {
   const { data, error } = await supabase
     .from('user_profiles')
     .select('*')
-    .eq('id', userId)
+    .eq('id', userId.toString())
     .single();
   
   if (error || !data) {
