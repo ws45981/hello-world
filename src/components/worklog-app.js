@@ -55,6 +55,12 @@ export default function WorkLogApp() {
   // behind the modal overlay, so a failure there is invisible until it closes.
   const [groupError, setGroupError] = useState("");
   const [groupSaving, setGroupSaving] = useState(false);
+  // Collapse state is intentionally per-session only, not persisted.
+  const [collapsedGroups, setCollapsedGroups] = useState([]);
+  const [editingNoteGroupId, setEditingNoteGroupId] = useState(null);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteError, setNoteError] = useState("");
 
   const loadRecords = async (userProfile) => {
     const supabase = getSupabaseClient();
@@ -289,32 +295,56 @@ export default function WorkLogApp() {
 
   };
 
-  const handleFileUpload = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file || !user) return null;
+  // Takes a list of File objects and resolves to the URLs that uploaded cleanly.
+  // A failure on one file is reported but does not abandon the rest, so the
+  // returned array can be shorter than the input.
+  const handleFileUpload = async (files) => {
+    const list = Array.from(files || []);
+    if (list.length === 0 || !user) return [];
+
     setUploading(true);
     const supabase = getSupabaseClient();
     if (!isSupabaseConfigured() || !supabase) {
       setUploading(false);
       setMessage("File noted locally — Supabase not configured.");
-      return null;
+      return [];
     }
-    const filePath = `${profile.id}/${Date.now()}-${file.name}`;
-    const { error: uploadError } = await supabase.storage
-      .from("incident-attachments")
-      .upload(filePath, file, { upsert: false });
-    if (uploadError) {
-      console.error("Upload error:", uploadError);
-      setError(`Upload failed: ${uploadError.message}`);
-      setUploading(false);
-      return null;
+
+    const stamp = Date.now();
+    const urls = [];
+    const failures = [];
+
+    for (let i = 0; i < list.length; i += 1) {
+      const file = list[i];
+      // The index keeps paths distinct: several files picked at once would
+      // otherwise share a millisecond, collide, and fail against upsert: false.
+      const filePath = `${profile.id}/${stamp}-${i}-${file.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from("incident-attachments")
+        .upload(filePath, file, { upsert: false });
+
+      if (uploadError) {
+        console.error("Upload error:", uploadError);
+        failures.push(`${file.name}: ${uploadError.message}`);
+        continue;
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from("incident-attachments")
+        .getPublicUrl(filePath);
+      urls.push(publicUrlData.publicUrl);
     }
-    const { data: publicUrlData } = supabase.storage
-      .from("incident-attachments")
-      .getPublicUrl(filePath);
+
     setUploading(false);
-    setMessage("Attachment uploaded successfully.");
-    return publicUrlData.publicUrl;
+
+    if (failures.length > 0) {
+      setError(`Upload failed — ${failures.join("; ")}`);
+    }
+    if (urls.length > 0) {
+      setMessage(`${urls.length} attachment${urls.length === 1 ? "" : "s"} uploaded successfully.`);
+    }
+
+    return urls;
   };
 
   const startEdit = (entry) => {
@@ -618,6 +648,55 @@ export default function WorkLogApp() {
     setGroups((current) => current.filter((g) => g.id !== group.id));
     setGroupEntries((current) => current.filter((ge) => ge.group_id !== group.id));
     setMessage(`Group "${group.title}" deleted. Its submissions were kept.`);
+  };
+
+  const toggleGroupCollapsed = (groupId) =>
+    setCollapsedGroups((current) =>
+      current.includes(groupId)
+        ? current.filter((id) => id !== groupId)
+        : [...current, groupId],
+    );
+
+  const startEditNote = (group) => {
+    setEditingNoteGroupId(group.id);
+    setNoteDraft(group.notes || "");
+    setNoteError("");
+  };
+
+  const saveGroupNote = async (groupId) => {
+    setNoteError("");
+    const supabase = getSupabaseClient();
+    if (!isSupabaseConfigured() || !supabase) {
+      setNoteError("Supabase is not configured, so the note cannot be saved.");
+      return;
+    }
+
+    setNoteSaving(true);
+    const trimmed = noteDraft.trim();
+    const { data, error: noteSaveError } = await supabase
+      .from("incident_groups")
+      .update({ notes: trimmed || null })
+      .eq("id", groupId)
+      .select("id");
+
+    setNoteSaving(false);
+
+    if (noteSaveError) {
+      setNoteError(noteSaveError.message);
+      return;
+    }
+    // An update blocked by row-level security reports success with zero rows
+    // touched, so an empty result means nothing was written.
+    if (!data || data.length === 0) {
+      setNoteError("Nothing was saved — the database rejected the update.");
+      return;
+    }
+
+    setGroups((current) =>
+      current.map((g) => (g.id === groupId ? { ...g, notes: trimmed || null } : g)),
+    );
+    setEditingNoteGroupId(null);
+    setMessage("Group note saved.");
   };
 
   const matchesAdminFilters = (r) => {
@@ -1321,12 +1400,29 @@ export default function WorkLogApp() {
                   {groups.map((group) => {
                     const memberIds = entryIdsInGroup(group.id);
                     const members = visibleAdminRecords.filter((r) => memberIds.includes(r.id));
+                    const collapsed = collapsedGroups.includes(group.id);
+                    const editingNote = editingNoteGroupId === group.id;
                     return (
                       <React.Fragment key={group.id}>
                         <tr className="border-t-2 border-indigo-200 bg-indigo-50">
                           <td colSpan={adminColSpan} className="px-3 py-3">
                             <div className="flex flex-wrap items-center justify-between gap-3">
                               <div className="flex flex-wrap items-center gap-3">
+                                <button
+                                  type="button"
+                                  aria-expanded={!collapsed}
+                                  aria-label={collapsed ? "Expand group" : "Collapse group"}
+                                  className="flex h-6 w-6 items-center justify-center rounded-full text-slate-500 hover:bg-indigo-100"
+                                  onClick={() => toggleGroupCollapsed(group.id)}
+                                >
+                                  <span
+                                    className={`inline-block text-xs transition-transform duration-200 ${
+                                      collapsed ? "" : "rotate-90"
+                                    }`}
+                                  >
+                                    ▶
+                                  </span>
+                                </button>
                                 <span className="rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold text-white">
                                   Incident Group
                                 </span>
@@ -1340,6 +1436,12 @@ export default function WorkLogApp() {
                                 </span>
                               </div>
                               <div className="flex flex-wrap gap-2">
+                                <button
+                                  className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-700 border border-slate-300 hover:bg-slate-100"
+                                  onClick={() => (editingNote ? setEditingNoteGroupId(null) : startEditNote(group))}
+                                >
+                                  {group.notes ? "Edit Note" : "Add Note"}
+                                </button>
                                 <button
                                   className="rounded-full bg-white px-3 py-1 text-xs font-medium text-indigo-700 border border-indigo-300 hover:bg-indigo-100"
                                   onClick={() => startAddToGroup(group.id)}
@@ -1356,7 +1458,55 @@ export default function WorkLogApp() {
                             </div>
                           </td>
                         </tr>
-                        {members.length === 0 && (
+
+                        {/* Note editor and note body stay visible when collapsed —
+                            collapsing hides the submissions, not the group's own context. */}
+                        {editingNote && (
+                          <tr className="bg-indigo-50/60">
+                            <td colSpan={adminColSpan} className="px-3 py-3 pl-10">
+                              <textarea
+                                className="min-h-24 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                                placeholder="Add context about this incident group..."
+                                value={noteDraft}
+                                onChange={(e) => setNoteDraft(e.target.value)}
+                              />
+                              {noteError && (
+                                <p className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                                  🚫 {noteError}
+                                </p>
+                              )}
+                              <div className="mt-2 flex gap-2">
+                                <button
+                                  className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700 disabled:bg-slate-300"
+                                  disabled={noteSaving}
+                                  onClick={() => saveGroupNote(group.id)}
+                                >
+                                  {noteSaving ? "Saving..." : "Save"}
+                                </button>
+                                <button
+                                  className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                                  disabled={noteSaving}
+                                  onClick={() => setEditingNoteGroupId(null)}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+
+                        {group.notes && !editingNote && (
+                          <tr className="bg-indigo-50/30">
+                            <td colSpan={adminColSpan} className="px-3 py-2 pl-10">
+                              <div className="rounded-lg border border-indigo-100 bg-white px-3 py-2 text-sm text-slate-600">
+                                <span className="font-medium text-slate-500">Note: </span>
+                                <span className="whitespace-pre-wrap">{group.notes}</span>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+
+                        {!collapsed && members.length === 0 && (
                           <tr className="bg-indigo-50/40">
                             <td colSpan={adminColSpan} className="px-3 py-3 pl-10 text-sm text-slate-500">
                               {memberIds.length === 0
@@ -1365,7 +1515,7 @@ export default function WorkLogApp() {
                             </td>
                           </tr>
                         )}
-                        {members.map((record) => renderAdminRow(record, group))}
+                        {!collapsed && members.map((record) => renderAdminRow(record, group))}
                       </React.Fragment>
                     );
                   })}

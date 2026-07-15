@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import DateTimePicker from "./DateTimePicker";
+import AttachmentPicker from "./AttachmentPicker";
 import LocationSelector, { hasSite, locationTextClass } from "./LocationSelector";
 
 const formatDateInput = (value) => {
@@ -92,7 +93,7 @@ const makeEmptyForm = () => ({
   attachments: [],
 });
 
-export default function MissingExpiringForm({ user, onSubmit, uploading, onFileUpload, editingData, onCancelEdit }) {
+export default function MissingExpiringForm({ user, onSubmit, onFileUpload, editingData, onCancelEdit }) {
   const [form, setForm] = useState(editingData || makeEmptyForm());
 
   const handleSubmit = (e) => {
@@ -303,25 +304,11 @@ export default function MissingExpiringForm({ user, onSubmit, uploading, onFileU
       </div>
 
       {/* Attachments */}
-      <div>
-        <label className="mb-2 block text-sm font-medium text-slate-700">Attachments</label>
-        <input
-          type="file"
-          accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
-          capture={typeof window !== "undefined" && /Mobi|Android/i.test(navigator.userAgent) ? "environment" : undefined}
-          className="w-full rounded-xl border border-slate-300 px-3 py-3 text-sm"
-          onChange={async (e) => {
-            const url = await onFileUpload(e);
-            if (url) setForm((f) => ({ ...f, attachments: [...f.attachments, url] }));
-          }}
-        />
-        {uploading && <p className="mt-2 text-sm text-slate-500">Uploading...</p>}
-        {form.attachments.length > 0 && (
-          <ul className="mt-2 space-y-1 text-sm text-slate-600">
-            {form.attachments.map((a, i) => <li key={i}>📎 {a}</li>)}
-          </ul>
-        )}
-      </div>
+      <AttachmentPicker
+        attachments={form.attachments}
+        onFileUpload={onFileUpload}
+        onAdd={(urls) => setForm((f) => ({ ...f, attachments: [...f.attachments, ...urls] }))}
+      />
 
       {/* Submit */}
       <div className="flex flex-wrap gap-3">
