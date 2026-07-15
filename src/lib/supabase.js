@@ -73,5 +73,7 @@ export async function getUserProfile(userId) {
     return newProfile;
   }
   
+  console.log("getUserProfile result:", data);
   return data;
+}
 }
