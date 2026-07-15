@@ -37,7 +37,24 @@ update storage.buckets
  where id = 'incident-attachments';
 
 
--- 2. Object policies -----------------------------------------------------------
+-- 2. Drop the permissive legacy policies ---------------------------------------
+--
+-- These two were created before this change and check only bucket_id, with no
+-- ownership test:
+--
+--   "Authenticated users can read"    qual:       bucket_id = 'incident-attachments'
+--   "Authenticated users can upload"  with_check: bucket_id = 'incident-attachments'
+--
+-- Postgres OR's permissive policies together, so leaving either in place makes
+-- the scoped policies in step 3 decorative: any signed-in user could still read
+-- every attachment, and write into any other user's folder. Both are confined to
+-- this bucket, so dropping them affects nothing else.
+
+drop policy if exists "Authenticated users can read" on storage.objects;
+drop policy if exists "Authenticated users can upload" on storage.objects;
+
+
+-- 3. Object policies -----------------------------------------------------------
 -- Scoped by bucket_id so other buckets are unaffected.
 
 drop policy if exists "Read own attachments or admin" on storage.objects;
@@ -78,15 +95,21 @@ create policy "Delete own attachments or admin"
   );
 
 
--- 3. Verify --------------------------------------------------------------------
+-- 4. Verify --------------------------------------------------------------------
 
 -- Expect public = false.
 select id, public
   from storage.buckets
  where id = 'incident-attachments';
 
--- Expect the three policies above, all scoped to {authenticated}.
-select policyname, cmd, roles
+-- Expect EXACTLY these three, and nothing else:
+--   Delete own attachments or admin | DELETE
+--   Read own attachments or admin   | SELECT
+--   Upload own attachments          | INSERT
+--
+-- Any extra policy naming this bucket without an ownership test re-opens it,
+-- because permissive policies are OR'd. Check the qual column, not just the name.
+select policyname, cmd, roles, qual, with_check
   from pg_policies
  where schemaname = 'storage'
    and tablename = 'objects'
