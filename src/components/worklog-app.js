@@ -43,31 +43,14 @@ export default function WorkLogApp() {
   const [showDeletedSubmissions, setShowDeletedSubmissions] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [selectedDeletedEntry, setSelectedDeletedEntry] = useState(null);
-
-  useEffect(() => {
-    const loadSession = async () => {
-      const currentUser = await getCurrentUser();
-      if (currentUser) {
-        const userProfile = await getUserProfile(currentUser.id);
-        setUser(currentUser);
-        setProfile(userProfile);
-        if (!userProfile?.password_changed) {
-          setForcePasswordChange(true);
-        } else {
-          await loadRecords(userProfile);
-          await loadPersonnel();
-        }
-      }
-      setLoading(false);
-    };
-    loadSession();
-  }, []);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.__EMS_PERSONNEL__ = personnel;
-    }
-  }, [personnel]);
+  const [groups, setGroups] = useState([]);
+  const [groupEntries, setGroupEntries] = useState([]);
+  const [groupingMode, setGroupingMode] = useState(false);
+  const [selectedForGroup, setSelectedForGroup] = useState([]);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [groupForm, setGroupForm] = useState({ title: "", date: "", time: "" });
+  const [addToGroupId, setAddToGroupId] = useState(null);
+  const [deleteGroupConfirm, setDeleteGroupConfirm] = useState(null);
 
   const loadRecords = async (userProfile) => {
     const supabase = getSupabaseClient();
@@ -95,6 +78,50 @@ export default function WorkLogApp() {
     if (data) setPersonnel(data);
   };
 
+  // Both tables are Master Admin-only at the RLS layer, so this returns empty
+  // for everyone else rather than erroring.
+  const loadGroups = async () => {
+    const supabase = getSupabaseClient();
+    if (!isSupabaseConfigured() || !supabase) return;
+    const { data: groupData } = await supabase
+      .from("incident_groups")
+      .select("*")
+      .order("incident_date", { ascending: false });
+    const { data: linkData } = await supabase
+      .from("incident_group_entries")
+      .select("*");
+    if (groupData) setGroups(groupData);
+    if (linkData) setGroupEntries(linkData);
+  };
+
+  // Declared after the loaders above so the effect does not reference them
+  // before initialisation.
+  useEffect(() => {
+    const loadSession = async () => {
+      const currentUser = await getCurrentUser();
+      if (currentUser) {
+        const userProfile = await getUserProfile(currentUser.id);
+        setUser(currentUser);
+        setProfile(userProfile);
+        if (!userProfile?.password_changed) {
+          setForcePasswordChange(true);
+        } else {
+          await loadRecords(userProfile);
+          await loadPersonnel();
+          await loadGroups();
+        }
+      }
+      setLoading(false);
+    };
+    loadSession();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.__EMS_PERSONNEL__ = personnel;
+    }
+  }, [personnel]);
+
   const handleLogin = async (authUser) => {
     const userProfile = await getUserProfile(authUser.id);
     setUser(authUser);
@@ -104,6 +131,7 @@ export default function WorkLogApp() {
     } else {
       await loadRecords(userProfile);
       await loadPersonnel();
+      await loadGroups();
     }
   };
 
@@ -433,6 +461,247 @@ export default function WorkLogApp() {
     link.download = "worklog-export.csv";
     link.click();
     URL.revokeObjectURL(link.href);
+  };
+
+  const entryIdsInGroup = (groupId) =>
+    groupEntries.filter((ge) => ge.group_id === groupId).map((ge) => ge.entry_id);
+
+  const exitGroupingMode = () => {
+    setGroupingMode(false);
+    setSelectedForGroup([]);
+    setAddToGroupId(null);
+  };
+
+  const toggleSelectForGroup = (entryId) =>
+    setSelectedForGroup((current) =>
+      current.includes(entryId)
+        ? current.filter((id) => id !== entryId)
+        : [...current, entryId],
+    );
+
+  const startAddToGroup = (groupId) => {
+    setGroupingMode(true);
+    setAddToGroupId(groupId);
+    setSelectedForGroup([]);
+  };
+
+  const createGroup = async () => {
+    setError("");
+    if (!groupForm.title.trim()) {
+      setError("Group title is required.");
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!isSupabaseConfigured() || !supabase) return;
+
+    const { data: group, error: groupError } = await supabase
+      .from("incident_groups")
+      .insert({
+        title: groupForm.title.trim(),
+        incident_date: groupForm.date || null,
+        incident_time: groupForm.time || null,
+        created_by: profile.id,
+      })
+      .select()
+      .single();
+
+    if (groupError) {
+      setError(groupError.message);
+      return;
+    }
+
+    const { data: links, error: linkError } = await supabase
+      .from("incident_group_entries")
+      .insert(selectedForGroup.map((entryId) => ({ group_id: group.id, entry_id: entryId })))
+      .select();
+
+    if (linkError) {
+      setError(linkError.message);
+      return;
+    }
+
+    setGroups((current) => [group, ...current]);
+    setGroupEntries((current) => [...current, ...(links || [])]);
+    setShowCreateGroup(false);
+    setGroupForm({ title: "", date: "", time: "" });
+    exitGroupingMode();
+    setMessage(`Group "${group.title}" created with ${links?.length || 0} submission(s).`);
+  };
+
+  const addSelectedToGroup = async () => {
+    setError("");
+    const supabase = getSupabaseClient();
+    if (!isSupabaseConfigured() || !supabase) return;
+
+    // Existing members are already excluded in the UI, but filtering again keeps
+    // the unique (group_id, entry_id) constraint from rejecting the whole batch.
+    const existing = entryIdsInGroup(addToGroupId);
+    const toAdd = selectedForGroup.filter((id) => !existing.includes(id));
+    if (toAdd.length === 0) {
+      exitGroupingMode();
+      return;
+    }
+
+    const { data: links, error: linkError } = await supabase
+      .from("incident_group_entries")
+      .insert(toAdd.map((entryId) => ({ group_id: addToGroupId, entry_id: entryId })))
+      .select();
+
+    if (linkError) {
+      setError(linkError.message);
+      return;
+    }
+
+    setGroupEntries((current) => [...current, ...(links || [])]);
+    setMessage(`Added ${links?.length || 0} submission(s) to the group.`);
+    exitGroupingMode();
+  };
+
+  const removeFromGroup = async (groupId, entryId) => {
+    setError("");
+    const supabase = getSupabaseClient();
+    if (!isSupabaseConfigured() || !supabase) return;
+
+    const { error: removeError } = await supabase
+      .from("incident_group_entries")
+      .delete()
+      .eq("group_id", groupId)
+      .eq("entry_id", entryId);
+
+    if (removeError) {
+      setError(removeError.message);
+      return;
+    }
+
+    setGroupEntries((current) =>
+      current.filter((ge) => !(ge.group_id === groupId && ge.entry_id === entryId)),
+    );
+    setMessage("Submission removed from the group.");
+  };
+
+  // Deletes only the group and its membership rows. incident_entries is never
+  // touched, so every submission survives and reappears as ungrouped.
+  const confirmDeleteGroup = async () => {
+    const group = deleteGroupConfirm;
+    if (!group) return;
+    setDeleteGroupConfirm(null);
+    setError("");
+
+    const supabase = getSupabaseClient();
+    if (!isSupabaseConfigured() || !supabase) return;
+
+    const { error: deleteError } = await supabase
+      .from("incident_groups")
+      .delete()
+      .eq("id", group.id);
+
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+
+    setGroups((current) => current.filter((g) => g.id !== group.id));
+    setGroupEntries((current) => current.filter((ge) => ge.group_id !== group.id));
+    setMessage(`Group "${group.title}" deleted. Its submissions were kept.`);
+  };
+
+  const matchesAdminFilters = (r) => {
+    if (r.status === "deleted" || r.permanently_deleted) return false;
+    const matchCat = selectedCategory === "All" || r.category === selectedCategory;
+    const matchFrom = !dateFrom || r.date >= dateFrom;
+    const matchTo = !dateTo || r.date <= dateTo;
+    const matchEmp = !employeeFilter || r.employee_name?.toLowerCase().includes(employeeFilter.toLowerCase());
+    return matchCat && matchFrom && matchTo && matchEmp;
+  };
+
+  const visibleAdminRecords = records.filter(matchesAdminFilters);
+  const groupedEntryIds = new Set(groupEntries.map((ge) => ge.entry_id));
+  const ungroupedAdminRecords = visibleAdminRecords.filter((r) => !groupedEntryIds.has(r.id));
+  const adminColSpan = groupingMode ? 7 : 6;
+
+  // Shared by the grouped and ungrouped sections. `group` is null for ungrouped
+  // rows; when set, the row is indented, tinted, and offered a remove action.
+  const renderAdminRow = (record, group) => {
+    const isSelected = selectedEntry?.id === record.id;
+    const alreadyInTargetGroup =
+      addToGroupId !== null && entryIdsInGroup(addToGroupId).includes(record.id);
+    const checked = selectedForGroup.includes(record.id) || alreadyInTargetGroup;
+
+    return (
+      // A submission can sit in several groups, so the key must include the
+      // group to stay unique across those repeats.
+      <React.Fragment key={`${group ? group.id : "ungrouped"}-${record.id}`}>
+        <tr className={`border-t border-slate-200 ${group ? "bg-indigo-50/40" : ""}`}>
+          {groupingMode && (
+            <td className="px-3 py-3">
+              <input
+                type="checkbox"
+                checked={checked}
+                disabled={alreadyInTargetGroup}
+                onChange={() => toggleSelectForGroup(record.id)}
+              />
+            </td>
+          )}
+          <td className={`px-3 py-3 ${group ? "pl-8" : ""}`}>{record.employee_name}</td>
+          <td className="px-3 py-3">{record.date}</td>
+          <td className="px-3 py-3">{record.category}</td>
+          <td className="px-3 py-3 max-w-xs truncate">{record.description}</td>
+          <td className="px-3 py-3">
+            <div className="flex flex-col gap-1">
+              <span className={`rounded-full px-2 py-1 text-xs font-medium ${
+                record.status === "deleted" ? "bg-rose-100 text-rose-700" :
+                record.status === "archived" ? "bg-amber-100 text-amber-700" :
+                "bg-emerald-100 text-emerald-700"
+              }`}>
+                {record.status || "active"}
+              </span>
+              {record.reviewed && (
+                <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">
+                  ✓ Reviewed
+                </span>
+              )}
+            </div>
+          </td>
+          <td className="px-3 py-3">
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="rounded-full bg-slate-100 px-3 py-1 text-xs"
+                onClick={() => setSelectedEntry(isSelected ? null : record)}
+              >
+                {isSelected ? "Close" : "View"}
+              </button>
+              <button
+                className={`rounded-full px-3 py-1 text-xs ${record.reviewed ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"}`}
+                onClick={() => toggleReviewed(record)}
+              >
+                {record.reviewed ? "✓ Reviewed" : "Mark Reviewed"}
+              </button>
+              {group && (
+                <button
+                  className="rounded-full bg-indigo-100 px-3 py-1 text-xs text-indigo-700"
+                  onClick={() => removeFromGroup(group.id, record.id)}
+                >
+                  Remove from Group
+                </button>
+              )}
+              <button
+                className="rounded-full bg-rose-50 px-3 py-1 text-xs text-rose-600"
+                onClick={() => deleteEntry(record)}
+              >
+                Delete
+              </button>
+            </div>
+          </td>
+        </tr>
+        {isSelected && (
+          <tr>
+            <td colSpan={adminColSpan} className="px-4 py-4 bg-slate-50 border-t border-slate-200">
+              {renderEntryDetail(record)}
+            </td>
+          </tr>
+        )}
+      </React.Fragment>
+    );
   };
 
   const renderForm = () => {
@@ -943,13 +1212,36 @@ export default function WorkLogApp() {
                 <p className="text-sm font-medium text-slate-500">Administrative view</p>
                 <h2 className="text-2xl font-semibold">All Submissions</h2>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   className="rounded-xl bg-slate-900 px-4 py-2 font-semibold text-white"
                   onClick={exportCsv}
                 >
                   Export CSV
                 </button>
+                <button
+                  className={`rounded-xl border px-4 py-2 font-semibold ${groupingMode ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300 text-slate-700"}`}
+                  onClick={() => (groupingMode ? exitGroupingMode() : setGroupingMode(true))}
+                >
+                  {groupingMode ? "Cancel Grouping" : "Group Submissions"}
+                </button>
+                {groupingMode && selectedForGroup.length > 0 && (
+                  addToGroupId ? (
+                    <button
+                      className="rounded-xl bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-700"
+                      onClick={addSelectedToGroup}
+                    >
+                      Add {selectedForGroup.length} to Group
+                    </button>
+                  ) : (
+                    <button
+                      className="rounded-xl bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-700"
+                      onClick={() => setShowCreateGroup(true)}
+                    >
+                      Create Group ({selectedForGroup.length})
+                    </button>
+                  )
+                )}
                 <button
                   className={`rounded-xl border px-4 py-2 font-semibold ${showDeletedSubmissions ? "bg-rose-600 text-white border-rose-600" : "border-slate-300 text-slate-700"}`}
                   onClick={() => setShowDeletedSubmissions(!showDeletedSubmissions)}
@@ -988,10 +1280,19 @@ export default function WorkLogApp() {
               />
             </div>
 
+            {groupingMode && (
+              <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
+                {addToGroupId
+                  ? "Select submissions to add to this group, then choose “Add to Group”. Submissions already in it are shown ticked and locked."
+                  : "Select submissions to group together, then choose “Create Group”. A submission can belong to more than one group."}
+              </div>
+            )}
+
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm">
                 <thead className="bg-slate-50 text-slate-600">
                   <tr>
+                    {groupingMode && <th className="px-3 py-2 w-10"></th>}
                     <th className="px-3 py-2">Employee</th>
                     <th className="px-3 py-2">Date</th>
                     <th className="px-3 py-2">Category</th>
@@ -1001,73 +1302,69 @@ export default function WorkLogApp() {
                   </tr>
                 </thead>
                 <tbody>
-                  {records
-                    .filter((r) => {
-                      if (r.status === "deleted" || r.permanently_deleted) return false;
-                      const matchCat = selectedCategory === "All" || r.category === selectedCategory;
-                      const matchFrom = !dateFrom || r.date >= dateFrom;
-                      const matchTo = !dateTo || r.date <= dateTo;
-                      const matchEmp = !employeeFilter || r.employee_name?.toLowerCase().includes(employeeFilter.toLowerCase());
-                      return matchCat && matchFrom && matchTo && matchEmp;
-                    })
-                    .map((record) => {
-                      const isSelected = selectedEntry?.id === record.id;
-                      return (
-                        <React.Fragment key={record.id}>
-                          <tr className={`border-t border-slate-200 ${record.status === "deleted" ? "bg-rose-50" : ""}`}>
-                            <td className="px-3 py-3">{record.employee_name}</td>
-                            <td className="px-3 py-3">{record.date}</td>
-                            <td className="px-3 py-3">{record.category}</td>
-                            <td className="px-3 py-3 max-w-xs truncate">{record.description}</td>
-                            <td className="px-3 py-3">
-                              <div className="flex flex-col gap-1">
-                                <span className={`rounded-full px-2 py-1 text-xs font-medium ${
-                                  record.status === "deleted" ? "bg-rose-100 text-rose-700" :
-                                  record.status === "archived" ? "bg-amber-100 text-amber-700" :
-                                  "bg-emerald-100 text-emerald-700"
-                                }`}>
-                                  {record.status || "active"}
+                  {/* Groups first, each header followed by its own submissions. */}
+                  {groups.map((group) => {
+                    const memberIds = entryIdsInGroup(group.id);
+                    const members = visibleAdminRecords.filter((r) => memberIds.includes(r.id));
+                    return (
+                      <React.Fragment key={group.id}>
+                        <tr className="border-t-2 border-indigo-200 bg-indigo-50">
+                          <td colSpan={adminColSpan} className="px-3 py-3">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div className="flex flex-wrap items-center gap-3">
+                                <span className="rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold text-white">
+                                  Incident Group
                                 </span>
-                                {record.reviewed && (
-                                  <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">
-                                    ✓ Reviewed
-                                  </span>
-                                )}
+                                <span className="font-semibold text-slate-900">
+                                  {group.incident_date || "—"} • {group.incident_time || "—"} — {group.title}
+                                </span>
+                                <span className="text-xs text-slate-500">
+                                  {memberIds.length} submission{memberIds.length === 1 ? "" : "s"}
+                                  {members.length !== memberIds.length &&
+                                    ` (${members.length} shown by current filters)`}
+                                </span>
                               </div>
-                            </td>
-                            <td className="px-3 py-3">
                               <div className="flex flex-wrap gap-2">
                                 <button
-                                  className="rounded-full bg-slate-100 px-3 py-1 text-xs"
-                                  onClick={() => setSelectedEntry(isSelected ? null : record)}
+                                  className="rounded-full bg-white px-3 py-1 text-xs font-medium text-indigo-700 border border-indigo-300 hover:bg-indigo-100"
+                                  onClick={() => startAddToGroup(group.id)}
                                 >
-                                  {isSelected ? "Close" : "View"}
+                                  Add Submissions
                                 </button>
                                 <button
-                                  className={`rounded-full px-3 py-1 text-xs ${record.reviewed ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"}`}
-                                  onClick={() => toggleReviewed(record)}
+                                  className="rounded-full bg-white px-3 py-1 text-xs font-medium text-rose-600 border border-rose-300 hover:bg-rose-50"
+                                  onClick={() => setDeleteGroupConfirm(group)}
                                 >
-                                  {record.reviewed ? "✓ Reviewed" : "Mark Reviewed"}
-                                </button>
-                                <button
-                                  className="rounded-full bg-rose-50 px-3 py-1 text-xs text-rose-600"
-                                  onClick={() => deleteEntry(record)}
-                                >
-                                  Delete
+                                  Delete Group
                                 </button>
                               </div>
+                            </div>
+                          </td>
+                        </tr>
+                        {members.length === 0 && (
+                          <tr className="bg-indigo-50/40">
+                            <td colSpan={adminColSpan} className="px-3 py-3 pl-10 text-sm text-slate-500">
+                              {memberIds.length === 0
+                                ? "No submissions in this group yet."
+                                : "No submissions in this group match the current filters."}
                             </td>
                           </tr>
-                          {isSelected && (
-                            <tr>
-                              <td colSpan={6} className="px-4 py-4 bg-slate-50 border-t border-slate-200">
-                                {renderEntryDetail(record)}
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
+                        )}
+                        {members.map((record) => renderAdminRow(record, group))}
+                      </React.Fragment>
+                    );
+                  })}
+
+                  {/* Ungrouped submissions below every group. */}
+                  {ungroupedAdminRecords.map((record) => renderAdminRow(record, null))}
+
+                  {groups.length === 0 && ungroupedAdminRecords.length === 0 && (
+                    <tr>
+                      <td colSpan={adminColSpan} className="px-3 py-6 text-center text-sm text-slate-500">
+                        No submissions match the current filters.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1194,6 +1491,91 @@ export default function WorkLogApp() {
           </section>
         )}
       </main>
+
+      {/* Create Group Dialog */}
+      {showCreateGroup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-900">Create Incident Group</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Grouping {selectedForGroup.length} submission{selectedForGroup.length === 1 ? "" : "s"}.
+            </p>
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Title</label>
+                <input
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2"
+                  placeholder="e.g. Ambulance 12 rollover"
+                  value={groupForm.title}
+                  onChange={(e) => setGroupForm((f) => ({ ...f, title: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Incident Date</label>
+                  <input
+                    type="date"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2"
+                    value={groupForm.date}
+                    onChange={(e) => setGroupForm((f) => ({ ...f, date: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Incident Time</label>
+                  <input
+                    type="time"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2"
+                    value={groupForm.time}
+                    onChange={(e) => setGroupForm((f) => ({ ...f, time: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="mt-5 flex flex-col gap-2">
+              <button
+                className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-700 disabled:bg-slate-300"
+                disabled={!groupForm.title.trim()}
+                onClick={createGroup}
+              >
+                Create Group
+              </button>
+              <button
+                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-500 hover:bg-slate-50"
+                onClick={() => setShowCreateGroup(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Group Confirmation Dialog */}
+      {deleteGroupConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-900">Delete Incident Group</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              This dissolves the group “{deleteGroupConfirm.title}”. Every submission in it is kept
+              and moves back to the ungrouped list — nothing is deleted.
+            </p>
+            <div className="mt-4 flex flex-col gap-2">
+              <button
+                className="w-full rounded-xl bg-rose-600 px-4 py-3 font-semibold text-white hover:bg-rose-700"
+                onClick={confirmDeleteGroup}
+              >
+                Delete Group
+              </button>
+              <button
+                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-500 hover:bg-slate-50"
+                onClick={() => setDeleteGroupConfirm(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Dialog */}
       {showDeleteConfirm && (
