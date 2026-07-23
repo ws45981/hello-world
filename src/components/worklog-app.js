@@ -75,9 +75,13 @@ export default function WorkLogApp() {
   const [unlockReason, setUnlockReason] = useState("");
   const [unlockSubmitting, setUnlockSubmitting] = useState(false);
   const [unlockSent, setUnlockSent] = useState(false);
+  // Shown inside the modals, not the page banner — the banner renders behind the
+  // overlay and would be invisible.
+  const [unlockError, setUnlockError] = useState("");
   const [resolveRequest, setResolveRequest] = useState(null); // admin resolving
   const [resolveNote, setResolveNote] = useState("");
   const [resolveSubmitting, setResolveSubmitting] = useState(false);
+  const [resolveError, setResolveError] = useState("");
   const [unlockBannerDismissed, setUnlockBannerDismissed] = useState(false);
 
   const loadRecords = async (userProfile) => {
@@ -612,7 +616,7 @@ export default function WorkLogApp() {
   const submitUnlockRequest = async () => {
     if (!unlockModalEntry || !unlockReason.trim()) return;
     setUnlockSubmitting(true);
-    setError("");
+    setUnlockError("");
     const supabase = getSupabaseClient();
     const row = {
       entry_id: unlockModalEntry.id,
@@ -623,7 +627,7 @@ export default function WorkLogApp() {
     if (isSupabaseConfigured() && supabase) {
       const { data, error } = await supabase.from("unlock_requests").insert(row).select().single();
       setUnlockSubmitting(false);
-      if (error) { setError(error.message); return; }
+      if (error) { setUnlockError(error.message); return; }
       if (data) setUnlockRequests((cur) => [data, ...cur]);
     } else {
       setUnlockSubmitting(false);
@@ -638,7 +642,7 @@ export default function WorkLogApp() {
     const request = resolveRequest;
     if (!request) return;
     setResolveSubmitting(true);
-    setError("");
+    setResolveError("");
     const supabase = getSupabaseClient();
     const nowIso = new Date().toISOString();
 
@@ -648,10 +652,10 @@ export default function WorkLogApp() {
         .update({ locked: false, locked_at: null, locked_by: null, unlock_notification: true })
         .eq("id", request.entry_id)
         .select("id");
-      if (entryError) { setResolveSubmitting(false); setError(entryError.message); return; }
+      if (entryError) { setResolveSubmitting(false); setResolveError(entryError.message); return; }
       if (!entryData || entryData.length === 0) {
         setResolveSubmitting(false);
-        setError("Nothing was saved — the database rejected the unlock.");
+        setResolveError("Nothing was saved — the database rejected the unlock.");
         return;
       }
 
@@ -664,7 +668,7 @@ export default function WorkLogApp() {
           admin_note: resolveNote.trim() || null,
         })
         .eq("id", request.id);
-      if (reqError) { setResolveSubmitting(false); setError(reqError.message); return; }
+      if (reqError) { setResolveSubmitting(false); setResolveError(reqError.message); return; }
     }
 
     setRecords((cur) =>
@@ -1758,7 +1762,7 @@ export default function WorkLogApp() {
                         ) : (
                           <button
                             className="rounded-full bg-slate-800 px-3 py-1 text-sm text-white hover:bg-slate-700"
-                            onClick={() => { setUnlockModalEntry(entry); setUnlockReason(""); setUnlockSent(false); }}
+                            onClick={() => { setUnlockModalEntry(entry); setUnlockReason(""); setUnlockSent(false); setUnlockError(""); }}
                           >
                             🔒 Request Unlock
                           </button>
@@ -2303,7 +2307,7 @@ export default function WorkLogApp() {
                           </div>
                           <button
                             className="shrink-0 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
-                            onClick={() => { setResolveRequest(request); setResolveNote(""); }}
+                            onClick={() => { setResolveRequest(request); setResolveNote(""); setResolveError(""); }}
                           >
                             🔓 Unlock
                           </button>
@@ -2373,6 +2377,11 @@ export default function WorkLogApp() {
                   value={unlockReason}
                   onChange={(e) => setUnlockReason(e.target.value)}
                 />
+                {unlockError && (
+                  <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                    🚫 {unlockError}
+                  </p>
+                )}
                 <div className="mt-5 flex flex-col gap-2">
                   <button
                     className="w-full rounded-xl bg-slate-900 px-4 py-3 font-semibold text-white hover:bg-slate-700 disabled:bg-slate-300"
@@ -2413,6 +2422,11 @@ export default function WorkLogApp() {
               value={resolveNote}
               onChange={(e) => setResolveNote(e.target.value)}
             />
+            {resolveError && (
+              <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                🚫 {resolveError}
+              </p>
+            )}
             <div className="mt-5 flex flex-col gap-2">
               <button
                 className="w-full rounded-xl bg-slate-900 px-4 py-3 font-semibold text-white hover:bg-slate-700 disabled:bg-slate-300"
