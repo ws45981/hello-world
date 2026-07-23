@@ -22,10 +22,14 @@ alter table public.incident_entries
 
 -- 2. attachments: text[] of urls  ->  jsonb of objects -------------------------
 --
--- Existing rows hold a Postgres text[] of paths/urls. Each string becomes
--- { url, label:'', note:null, note_by:null, note_at:null }. Guarded by the column
--- type so re-running after the migration is a no-op.
+-- Two steps, because Postgres forbids a subquery inside an ALTER COLUMN ... USING
+-- expression:
+--   2a. cast text[] -> jsonb with to_jsonb, giving a jsonb array of strings
+--   2b. an ordinary UPDATE (subqueries allowed) wraps each string as
+--       { url, label:'', note:null, note_by:null, note_at:null }
+-- Both are guarded so re-running is a no-op.
 
+-- 2a. Type change only (no per-element transform here).
 do $$
 declare
   col_type text;
@@ -38,24 +42,35 @@ begin
 
   if col_type = 'ARRAY' then
     alter table public.incident_entries alter column attachments drop default;
-
     alter table public.incident_entries
-      alter column attachments type jsonb
-      using (
-        coalesce(
-          (select jsonb_agg(jsonb_build_object(
-                     'url', e, 'label', '', 'note', null, 'note_by', null, 'note_at', null))
-             from unnest(attachments) as e),
-          '[]'::jsonb)
-      );
-
-    alter table public.incident_entries alter column attachments set default '[]'::jsonb;
-
-  elsif col_type = 'jsonb' then
-    alter table public.incident_entries alter column attachments set default '[]'::jsonb;
+      alter column attachments type jsonb using to_jsonb(attachments);
   end if;
+
+  alter table public.incident_entries alter column attachments set default '[]'::jsonb;
 end
 $$;
+
+-- Any pre-existing NULL attachments become an empty array.
+update public.incident_entries
+   set attachments = '[]'::jsonb
+ where attachments is null;
+
+-- 2b. Wrap bare-string elements into objects. Objects are left untouched, so
+-- this is safe to run again.
+update public.incident_entries
+   set attachments = coalesce((
+         select jsonb_agg(
+                  case
+                    when jsonb_typeof(elem) = 'object' then elem
+                    else jsonb_build_object(
+                           'url', elem #>> '{}', 'label', '',
+                           'note', null, 'note_by', null, 'note_at', null)
+                  end)
+           from jsonb_array_elements(attachments) as elem), '[]'::jsonb)
+ where jsonb_typeof(attachments) = 'array'
+   and exists (
+     select 1 from jsonb_array_elements(attachments) as e
+      where jsonb_typeof(e) <> 'object');
 
 
 -- 3. Enforce lock and hide in RLS ----------------------------------------------
