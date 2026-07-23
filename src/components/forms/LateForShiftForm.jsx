@@ -18,7 +18,7 @@ const makeEmptyForm = () => ({
   additionalDetailsNA: false,
 });
 
-export default function LateForShiftForm({ user, onSubmit, editingData, onCancelEdit }) {
+export default function LateForShiftForm({ user, onSubmit, editingData, onCancelEdit, onClose }) {
   const [form, setForm] = useState(editingData || makeEmptyForm());
   const [submitError, setSubmitError] = useState("");
   const [timeWarning, setTimeWarning] = useState("");
@@ -225,6 +225,13 @@ export default function LateForShiftForm({ user, onSubmit, editingData, onCancel
           className="rounded-xl bg-slate-900 px-6 py-3 font-semibold text-white hover:bg-slate-700"
         >
           {editingData ? "Save Changes" : "Submit Incident"}
+        </button>
+        <button
+          type="button"
+          className="rounded-xl border border-slate-300 px-6 py-3 font-medium text-slate-600 hover:bg-slate-50"
+          onClick={onClose}
+        >
+          Close Without Saving
         </button>
         {editingData && (
           <button

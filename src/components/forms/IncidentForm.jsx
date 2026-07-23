@@ -39,7 +39,7 @@ const makeEmptyForm = (category = "") => ({
   attachments: [],
 });
 
-export default function IncidentForm({ category, categories, user, onSubmit, uploading, onFileUpload, editingData, onCancelEdit }) {
+export default function IncidentForm({ category, categories, user, onSubmit, uploading, onFileUpload, editingData, onCancelEdit, onClose }) {
   const [form, setForm] = useState(editingData || makeEmptyForm(category));
   const [submitError, setSubmitError] = useState("");
 
@@ -182,7 +182,9 @@ export default function IncidentForm({ category, categories, user, onSubmit, upl
       <AttachmentPicker
         attachments={form.attachments}
         onFileUpload={onFileUpload}
-        onAdd={(urls) => setForm((f) => ({ ...f, attachments: [...f.attachments, ...urls] }))}
+        onAdd={(paths) => setForm((f) => ({ ...f, attachments: [...f.attachments, ...paths.map((p) => ({ url: p, label: "", note: null, note_by: null, note_at: null }))] }))}
+        onUpdate={(i, patch) => setForm((f) => ({ ...f, attachments: f.attachments.map((a, idx) => (idx === i ? { ...a, ...patch } : a)) }))}
+        onRemove={(i) => setForm((f) => ({ ...f, attachments: f.attachments.filter((_, idx) => idx !== i) }))}
       />
 
       {/* Submit */}
@@ -200,6 +202,13 @@ export default function IncidentForm({ category, categories, user, onSubmit, upl
           className="rounded-xl bg-slate-900 px-6 py-3 font-semibold text-white hover:bg-slate-700 disabled:bg-slate-300"
         >
           {uploading ? "Waiting for upload..." : editingData ? "Save Changes" : "Submit Incident"}
+        </button>
+        <button
+          type="button"
+          className="rounded-xl border border-slate-300 px-6 py-3 font-medium text-slate-600 hover:bg-slate-50"
+          onClick={onClose}
+        >
+          Close Without Saving
         </button>
         {editingData && (
           <button

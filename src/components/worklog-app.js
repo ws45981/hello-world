@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { getSupabaseClient, isSupabaseConfigured, signOut, getCurrentUser, getUserProfile, toAttachmentPath, ATTACHMENT_BUCKET } from "@/lib/supabase";
+import { getSupabaseClient, isSupabaseConfigured, signOut, getCurrentUser, getUserProfile, toAttachmentPath, ATTACHMENT_BUCKET, normalizeAttachments } from "@/lib/supabase";
 import AttachmentLink from "@/components/AttachmentLink";
 import { CATEGORIES, ROLES, GENERAL_USER_RESTRICTED_CATEGORIES } from "@/lib/constants";
 import LoginForm from "@/components/auth/LoginForm";
@@ -62,6 +62,11 @@ export default function WorkLogApp() {
   const [noteDraft, setNoteDraft] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteError, setNoteError] = useState("");
+  const [showUnreviewedOnly, setShowUnreviewedOnly] = useState(false);
+  // Per-attachment label/note editing in the admin detail view, keyed by
+  // `${entryId}:${index}`.
+  const [attachmentDraft, setAttachmentDraft] = useState(null);
+  const [attachmentSaving, setAttachmentSaving] = useState(false);
 
   const loadRecords = async (userProfile) => {
     const supabase = getSupabaseClient();
@@ -249,7 +254,7 @@ export default function WorkLogApp() {
       involved_parties: formData.involvedPartiesNA ? [] : (formData.involvedParties || []),
       witnesses: formData.witnessesNA ? [] : (formData.witnesses || []),
       additional_details: formData.additionalDetailsNA ? "N/A" : (formData.additionalDetails || null),
-      attachments: formData.attachments || [],
+      attachments: normalizeAttachments(formData.attachments),
       phi_requested: formData.phiRequested || null,
       communication_method: formData.communicationMethod || null,
       other_communication_method: formData.otherCommunicationMethod || null,
@@ -394,11 +399,7 @@ export default function WorkLogApp() {
         : typeof entry.witnesses === "string"
         ? JSON.parse(entry.witnesses || "[]")
         : [],
-      attachments: Array.isArray(entry.attachments)
-        ? entry.attachments
-        : typeof entry.attachments === "string"
-        ? JSON.parse(entry.attachments || "[]")
-        : [],
+      attachments: normalizeAttachments(entry.attachments),
       storageType: entry.storage_type || "",
       storageLocation: entry.storage_location || "",
       itemReplaced: entry.item_replaced ?? null,
@@ -482,12 +483,95 @@ export default function WorkLogApp() {
         .eq("id", entry.id);
       if (error) { setError(error.message); return; }
     }
-    setRecords((current) => current.map((r) => 
-      r.id === entry.id 
+    setRecords((current) => current.map((r) =>
+      r.id === entry.id
         ? { ...r, reviewed: newReviewed, reviewed_at: newReviewed ? new Date().toISOString() : null, reviewed_by: newReviewed ? profile.full_name : null }
         : r
     ));
     setMessage(newReviewed ? "Entry marked as reviewed." : "Review flag removed.");
+  };
+
+  const toggleLock = async (entry) => {
+    const newLocked = !entry.locked;
+    const patch = {
+      locked: newLocked,
+      locked_at: newLocked ? new Date().toISOString() : null,
+      locked_by: newLocked ? profile.full_name : null,
+    };
+    const supabase = getSupabaseClient();
+    if (isSupabaseConfigured() && supabase) {
+      const { data, error } = await supabase
+        .from("incident_entries")
+        .update(patch)
+        .eq("id", entry.id)
+        .select("id");
+      if (error) { setError(error.message); return; }
+      if (!data || data.length === 0) {
+        setError("Nothing was saved — the database rejected the update.");
+        return;
+      }
+    }
+    setRecords((current) => current.map((r) => (r.id === entry.id ? { ...r, ...patch } : r)));
+    setMessage(newLocked ? "Submission locked." : "Submission unlocked.");
+  };
+
+  const toggleHidden = async (entry) => {
+    const newHidden = !entry.hidden_from_user;
+    const supabase = getSupabaseClient();
+    if (isSupabaseConfigured() && supabase) {
+      const { data, error } = await supabase
+        .from("incident_entries")
+        .update({ hidden_from_user: newHidden })
+        .eq("id", entry.id)
+        .select("id");
+      if (error) { setError(error.message); return; }
+      if (!data || data.length === 0) {
+        setError("Nothing was saved — the database rejected the update.");
+        return;
+      }
+    }
+    setRecords((current) => current.map((r) => (r.id === entry.id ? { ...r, hidden_from_user: newHidden } : r)));
+    setMessage(newHidden ? "Submission hidden from the submitting user." : "Submission is visible to the user again.");
+  };
+
+  // Persists a label/note change on a single attachment. Rebuilds the whole
+  // attachments array because it is one jsonb column, normalizing first so a
+  // legacy string row becomes objects on the way through.
+  const saveAttachmentMeta = async (entry, index, patch) => {
+    setError("");
+    const current = normalizeAttachments(entry.attachments);
+    const next = current.map((a, i) =>
+      i === index
+        ? {
+            ...a,
+            ...patch,
+            note_by: patch.note !== undefined ? profile.full_name : a.note_by,
+            note_at: patch.note !== undefined ? new Date().toISOString() : a.note_at,
+          }
+        : a,
+    );
+
+    setAttachmentSaving(true);
+    const supabase = getSupabaseClient();
+    if (isSupabaseConfigured() && supabase) {
+      const { data, error } = await supabase
+        .from("incident_entries")
+        .update({ attachments: next })
+        .eq("id", entry.id)
+        .select("id");
+      setAttachmentSaving(false);
+      if (error) { setError(error.message); return; }
+      if (!data || data.length === 0) {
+        setError("Nothing was saved — the database rejected the update.");
+        return;
+      }
+    } else {
+      setAttachmentSaving(false);
+    }
+
+    setRecords((cur) => cur.map((r) => (r.id === entry.id ? { ...r, attachments: next } : r)));
+    setAttachmentDraft(null);
+    setMessage("Attachment updated.");
   };
 
   const exportCsv = () => {
@@ -720,10 +804,15 @@ export default function WorkLogApp() {
     const matchFrom = !dateFrom || r.date >= dateFrom;
     const matchTo = !dateTo || r.date <= dateTo;
     const matchEmp = !employeeFilter || r.employee_name?.toLowerCase().includes(employeeFilter.toLowerCase());
-    return matchCat && matchFrom && matchTo && matchEmp;
+    // reviewed may be false or null; both count as unreviewed.
+    const matchReviewed = !showUnreviewedOnly || !r.reviewed;
+    return matchCat && matchFrom && matchTo && matchEmp && matchReviewed;
   };
 
   const visibleAdminRecords = records.filter(matchesAdminFilters);
+  const myVisibleRecords = records.filter(
+    (r) => r.employee_id === profile?.id && r.status !== "deleted" && !r.hidden_from_user,
+  );
   const groupedEntryIds = new Set(groupEntries.map((ge) => ge.entry_id));
   const ungroupedAdminRecords = visibleAdminRecords.filter((r) => !groupedEntryIds.has(r.id));
   const adminColSpan = groupingMode ? 7 : 6;
@@ -769,6 +858,16 @@ export default function WorkLogApp() {
                   ✓ Reviewed
                 </span>
               )}
+              {record.locked && (
+                <span className="rounded-full bg-slate-800 px-2 py-1 text-xs font-medium text-white">
+                  🔒 Locked
+                </span>
+              )}
+              {record.hidden_from_user && (
+                <span className="rounded-full bg-purple-100 px-2 py-1 text-xs font-medium text-purple-700">
+                  Hidden from user
+                </span>
+              )}
             </div>
           </td>
           <td className="px-3 py-3">
@@ -784,6 +883,18 @@ export default function WorkLogApp() {
                 onClick={() => toggleReviewed(record)}
               >
                 {record.reviewed ? "✓ Reviewed" : "Mark Reviewed"}
+              </button>
+              <button
+                className={`rounded-full px-3 py-1 text-xs ${record.locked ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-600"}`}
+                onClick={() => toggleLock(record)}
+              >
+                {record.locked ? "🔒 Unlock" : "Lock"}
+              </button>
+              <button
+                className={`rounded-full px-3 py-1 text-xs ${record.hidden_from_user ? "bg-purple-100 text-purple-700" : "bg-slate-100 text-slate-600"}`}
+                onClick={() => toggleHidden(record)}
+              >
+                {record.hidden_from_user ? "Show to User" : "Hide from User"}
               </button>
               {group && (
                 <button
@@ -805,11 +916,103 @@ export default function WorkLogApp() {
         {isSelected && (
           <tr>
             <td colSpan={adminColSpan} className="px-4 py-4 bg-slate-50 border-t border-slate-200">
-              {renderEntryDetail(record)}
+              {renderEntryDetail(record, { editable: true })}
             </td>
           </tr>
         )}
       </React.Fragment>
+    );
+  };
+
+  // Mobile counterpart of renderAdminRow. Same data and actions, laid out as a
+  // stacked card so there is no horizontal scroll on small screens.
+  const renderAdminCard = (record, group) => {
+    const isSelected = selectedEntry?.id === record.id;
+    const alreadyInTargetGroup =
+      addToGroupId !== null && entryIdsInGroup(addToGroupId).includes(record.id);
+    const checked = selectedForGroup.includes(record.id) || alreadyInTargetGroup;
+
+    return (
+      <div
+        key={`card-${group ? group.id : "ungrouped"}-${record.id}`}
+        className={`w-full rounded-xl border border-slate-200 overflow-hidden ${group ? "bg-indigo-50/40" : ""}`}
+      >
+        <div className="flex flex-col gap-3 p-4">
+          <div className="flex items-start gap-3">
+            {groupingMode && (
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={checked}
+                disabled={alreadyInTargetGroup}
+                onChange={() => toggleSelectForGroup(record.id)}
+              />
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="font-medium">{record.category}</p>
+              <p className="text-sm text-slate-500">{record.employee_name}</p>
+              <p className="text-sm text-slate-500">{record.date} at {record.time}</p>
+              {record.description && (
+                <p className="mt-1 line-clamp-2 text-sm text-slate-600">{record.description}</p>
+              )}
+              <div className="mt-2 flex flex-wrap gap-1">
+                <span className={`rounded-full px-2 py-1 text-xs font-medium ${
+                  record.status === "deleted" ? "bg-rose-100 text-rose-700" :
+                  record.status === "archived" ? "bg-amber-100 text-amber-700" :
+                  "bg-emerald-100 text-emerald-700"
+                }`}>
+                  {record.status || "active"}
+                </span>
+                {record.reviewed && (
+                  <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">✓ Reviewed</span>
+                )}
+                {record.locked && (
+                  <span className="rounded-full bg-slate-800 px-2 py-1 text-xs font-medium text-white">🔒 Locked</span>
+                )}
+                {record.hidden_from_user && (
+                  <span className="rounded-full bg-purple-100 px-2 py-1 text-xs font-medium text-purple-700">Hidden from user</span>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button className="rounded-full bg-slate-100 px-3 py-1 text-xs" onClick={() => setSelectedEntry(isSelected ? null : record)}>
+              {isSelected ? "Close" : "View"}
+            </button>
+            <button
+              className={`rounded-full px-3 py-1 text-xs ${record.reviewed ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"}`}
+              onClick={() => toggleReviewed(record)}
+            >
+              {record.reviewed ? "✓ Reviewed" : "Mark Reviewed"}
+            </button>
+            <button
+              className={`rounded-full px-3 py-1 text-xs ${record.locked ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-600"}`}
+              onClick={() => toggleLock(record)}
+            >
+              {record.locked ? "🔒 Unlock" : "Lock"}
+            </button>
+            <button
+              className={`rounded-full px-3 py-1 text-xs ${record.hidden_from_user ? "bg-purple-100 text-purple-700" : "bg-slate-100 text-slate-600"}`}
+              onClick={() => toggleHidden(record)}
+            >
+              {record.hidden_from_user ? "Show to User" : "Hide from User"}
+            </button>
+            {group && (
+              <button className="rounded-full bg-indigo-100 px-3 py-1 text-xs text-indigo-700" onClick={() => removeFromGroup(group.id, record.id)}>
+                Remove from Group
+              </button>
+            )}
+            <button className="rounded-full bg-rose-50 px-3 py-1 text-xs text-rose-600" onClick={() => deleteEntry(record)}>
+              Delete
+            </button>
+          </div>
+        </div>
+        {isSelected && (
+          <div className="border-t border-slate-200 bg-slate-50 p-4">
+            {renderEntryDetail(record, { editable: true })}
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -823,6 +1026,10 @@ export default function WorkLogApp() {
       onFileUpload: handleFileUpload,
       editingData,
       onCancelEdit: () => { setEditingData(null); setViewMode("form"); },
+      // Discards the in-progress form and returns to the empty New Submission
+      // screen (category dropdown only). Nothing is written to Supabase; the
+      // form's own state is dropped when it unmounts.
+      onClose: () => { setEditingData(null); setActiveCategory(""); setViewMode("form"); },
     };
     if (cat === "PHI") return <PHIForm {...commonProps} />;
     if (cat === "Late for Shift") return <LateForShiftForm {...commonProps} />;
@@ -835,7 +1042,7 @@ export default function WorkLogApp() {
     return <IncidentForm {...commonProps} category={cat} />;
   };
 
-  const renderEntryDetail = (entry) => {
+  const renderEntryDetail = (entry, { editable = false } = {}) => {
     const parties = Array.isArray(entry.involved_parties)
       ? entry.involved_parties
       : typeof entry.involved_parties === "string"
@@ -996,15 +1203,84 @@ export default function WorkLogApp() {
             </ul>
           </div>
         )}
-        {entry.attachments?.length > 0 && (
+        {normalizeAttachments(entry.attachments).length > 0 && (
           <div className="md:col-span-2">
             <p className="text-sm font-medium text-slate-500">Attachments</p>
-            <ul className="mt-1 space-y-1">
-              {entry.attachments.map((a, i) => (
-                <li key={i} className="text-sm">
-                  <AttachmentLink value={a} className="text-blue-600 underline" />
-                </li>
-              ))}
+            <ul className="mt-1 space-y-2">
+              {normalizeAttachments(entry.attachments).map((att, i) => {
+                const draftKey = `${entry.id}:${i}`;
+                const editing = attachmentDraft?.key === draftKey;
+                return (
+                  <li key={`${att.url}-${i}`} className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <AttachmentLink value={att} className="text-blue-600 underline" />
+                      {editable && !editing && (
+                        <button
+                          className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600 hover:bg-slate-200"
+                          onClick={() =>
+                            setAttachmentDraft({ key: draftKey, label: att.label || "", note: att.note || "" })
+                          }
+                        >
+                          {att.label || att.note ? "Edit label / note" : "Add label / note"}
+                        </button>
+                      )}
+                    </div>
+
+                    {att.label && !editing && (
+                      <p className="mt-1 text-slate-600">
+                        <span className="font-medium text-slate-500">Label: </span>{att.label}
+                      </p>
+                    )}
+                    {att.note && !editing && (
+                      <div className="mt-1 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-amber-800">
+                        <span className="font-medium">Admin note: </span>
+                        <span className="whitespace-pre-wrap">{att.note}</span>
+                        {att.note_by && (
+                          <span className="block text-xs text-amber-600 mt-1">— {att.note_by}</span>
+                        )}
+                      </div>
+                    )}
+
+                    {editable && editing && (
+                      <div className="mt-2 space-y-2">
+                        <input
+                          className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900"
+                          placeholder="Label / description"
+                          value={attachmentDraft.label}
+                          onChange={(e) => setAttachmentDraft((d) => ({ ...d, label: e.target.value }))}
+                        />
+                        <textarea
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                          placeholder="Admin note about this attachment"
+                          value={attachmentDraft.note}
+                          onChange={(e) => setAttachmentDraft((d) => ({ ...d, note: e.target.value }))}
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700 disabled:bg-slate-300"
+                            disabled={attachmentSaving}
+                            onClick={() =>
+                              saveAttachmentMeta(entry, i, {
+                                label: attachmentDraft.label.trim(),
+                                note: attachmentDraft.note.trim() || null,
+                              })
+                            }
+                          >
+                            {attachmentSaving ? "Saving..." : "Save"}
+                          </button>
+                          <button
+                            className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                            disabled={attachmentSaving}
+                            onClick={() => setAttachmentDraft(null)}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}
@@ -1293,46 +1569,62 @@ export default function WorkLogApp() {
               </div>
             </div>
             <div className="space-y-3">
-              {records.filter((r) => r.employee_id === profile?.id && r.status !== "deleted").length === 0 && (
+              {/* hidden_from_user is also enforced by RLS, so hidden rows never
+                  reach a non-admin. This filter also hides them in the admin's
+                  own My Submissions view for consistency. */}
+              {myVisibleRecords.length === 0 && (
                 <p className="text-sm text-slate-500">No submissions yet.</p>
               )}
-              {records
-                .filter((r) => r.employee_id === profile?.id && r.status !== "deleted")
-                .map((entry) => (
-                  <div key={entry.id} className="rounded-xl border border-slate-200 overflow-hidden">
-                    <div className="flex flex-wrap items-center justify-between gap-2 p-4">
-                      <div>
+              {myVisibleRecords.map((entry) => (
+                <div key={entry.id} className="w-full rounded-xl border border-slate-200 overflow-hidden">
+                  <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
                         <p className="font-medium">{entry.category}</p>
-                        <p className="text-sm text-slate-500">{entry.date} at {entry.time}</p>
+                        {entry.locked && (
+                          <span className="rounded-full bg-slate-800 px-2 py-1 text-xs font-medium text-white">
+                            🔒 Locked
+                          </span>
+                        )}
                       </div>
-                      <div className="flex gap-2">
-                        <button
-                          className="rounded-full bg-slate-100 px-3 py-1 text-sm"
-                          onClick={() => setSelectedEntry(selectedEntry?.id === entry.id ? null : entry)}
-                        >
-                          {selectedEntry?.id === entry.id ? "Close" : "View"}
-                        </button>
-                        <button
-                          className="rounded-full bg-slate-100 px-3 py-1 text-sm"
-                          onClick={() => startEdit(entry)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="rounded-full bg-rose-50 px-3 py-1 text-sm text-rose-600"
-                          onClick={() => deleteEntry(entry)}
-                        >
-                          Delete
-                        </button>
-                      </div>
+                      <p className="text-sm text-slate-500">{entry.date} at {entry.time}</p>
                     </div>
-                    {selectedEntry?.id === entry.id && (
-                      <div className="border-t border-slate-200 bg-slate-50 p-4">
-                        {renderEntryDetail(entry)}
-                      </div>
-                    )}
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        className="rounded-full bg-slate-100 px-3 py-1 text-sm"
+                        onClick={() => setSelectedEntry(selectedEntry?.id === entry.id ? null : entry)}
+                      >
+                        {selectedEntry?.id === entry.id ? "Close" : "View"}
+                      </button>
+                      {entry.locked ? (
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-500">
+                          This submission has been locked and cannot be edited
+                        </span>
+                      ) : (
+                        <>
+                          <button
+                            className="rounded-full bg-slate-100 px-3 py-1 text-sm"
+                            onClick={() => startEdit(entry)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="rounded-full bg-rose-50 px-3 py-1 text-sm text-rose-600"
+                            onClick={() => deleteEntry(entry)}
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                ))}
+                  {selectedEntry?.id === entry.id && (
+                    <div className="border-t border-slate-200 bg-slate-50 p-4">
+                      {renderEntryDetail(entry)}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </section>
         )}
@@ -1374,6 +1666,12 @@ export default function WorkLogApp() {
                     </button>
                   )
                 )}
+                <button
+                  className={`rounded-xl border px-4 py-2 font-semibold ${showUnreviewedOnly ? "bg-amber-500 text-white border-amber-500" : "border-slate-300 text-slate-700"}`}
+                  onClick={() => setShowUnreviewedOnly((v) => !v)}
+                >
+                  {showUnreviewedOnly ? "Showing Unreviewed" : "Show Unreviewed Only"}
+                </button>
                 <button
                   className={`rounded-xl border px-4 py-2 font-semibold ${showDeletedSubmissions ? "bg-rose-600 text-white border-rose-600" : "border-slate-300 text-slate-700"}`}
                   onClick={() => setShowDeletedSubmissions(!showDeletedSubmissions)}
@@ -1420,7 +1718,8 @@ export default function WorkLogApp() {
               </div>
             )}
 
-            <div className="overflow-x-auto">
+            {/* Desktop: table. Mobile: card list below (md: breakpoint). */}
+            <div className="hidden overflow-x-auto md:block">
               <table className="min-w-full text-left text-sm">
                 <thead className="bg-slate-50 text-slate-600">
                   <tr>
@@ -1571,6 +1870,114 @@ export default function WorkLogApp() {
                 </tbody>
               </table>
             </div>
+
+            {/* Mobile: the same data as cards, so there is no sideways scroll. */}
+            <div className="space-y-4 md:hidden">
+              {groups.map((group) => {
+                const memberIds = entryIdsInGroup(group.id);
+                const members = visibleAdminRecords.filter((r) => memberIds.includes(r.id));
+                const collapsed = collapsedGroups.includes(group.id);
+                const editingNote = editingNoteGroupId === group.id;
+                return (
+                  <div key={`m-${group.id}`} className="rounded-xl border-2 border-indigo-200 bg-indigo-50 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <button
+                        type="button"
+                        aria-expanded={!collapsed}
+                        className="flex items-center gap-2 text-left"
+                        onClick={() => toggleGroupCollapsed(group.id)}
+                      >
+                        <span className={`inline-block text-xs transition-transform duration-200 ${collapsed ? "" : "rotate-90"}`}>▶</span>
+                        <span>
+                          <span className="mr-2 rounded-full bg-indigo-600 px-2 py-0.5 text-xs font-semibold text-white">Incident Group</span>
+                          <span className="font-semibold text-slate-900">{group.title}</span>
+                          <span className="block text-xs text-slate-500">
+                            {group.incident_date || "—"} • {group.incident_time || "—"} · {memberIds.length} submission{memberIds.length === 1 ? "" : "s"}
+                          </span>
+                        </span>
+                      </button>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-700 border border-slate-300"
+                        onClick={() => (editingNote ? setEditingNoteGroupId(null) : startEditNote(group))}
+                      >
+                        {group.notes ? "Edit Note" : "Add Note"}
+                      </button>
+                      <button
+                        className="rounded-full bg-white px-3 py-1 text-xs font-medium text-indigo-700 border border-indigo-300"
+                        onClick={() => startAddToGroup(group.id)}
+                      >
+                        Add Submissions
+                      </button>
+                      <button
+                        className="rounded-full bg-white px-3 py-1 text-xs font-medium text-rose-600 border border-rose-300"
+                        onClick={() => setDeleteGroupConfirm(group)}
+                      >
+                        Delete Group
+                      </button>
+                    </div>
+
+                    {editingNote && (
+                      <div className="mt-3">
+                        <textarea
+                          className="min-h-24 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                          placeholder="Add context about this incident group..."
+                          value={noteDraft}
+                          onChange={(e) => setNoteDraft(e.target.value)}
+                        />
+                        {noteError && <p className="mt-2 text-sm text-rose-700">🚫 {noteError}</p>}
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white disabled:bg-slate-300"
+                            disabled={noteSaving}
+                            onClick={() => saveGroupNote(group.id)}
+                          >
+                            {noteSaving ? "Saving..." : "Save"}
+                          </button>
+                          <button
+                            className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-medium text-slate-600"
+                            disabled={noteSaving}
+                            onClick={() => setEditingNoteGroupId(null)}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {group.notes && !editingNote && (
+                      <div className="mt-3 rounded-lg border border-indigo-100 bg-white px-3 py-2 text-sm text-slate-600">
+                        <span className="font-medium text-slate-500">Note: </span>
+                        <span className="whitespace-pre-wrap">{group.notes}</span>
+                      </div>
+                    )}
+
+                    {!collapsed && (
+                      <div className="mt-3 space-y-3">
+                        {members.length === 0 ? (
+                          <p className="text-sm text-slate-500">
+                            {memberIds.length === 0
+                              ? "No submissions in this group yet."
+                              : "No submissions in this group match the current filters."}
+                          </p>
+                        ) : (
+                          members.map((record) => renderAdminCard(record, group))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {ungroupedAdminRecords.map((record) => renderAdminCard(record, null))}
+
+              {groups.length === 0 && ungroupedAdminRecords.length === 0 && (
+                <p className="py-6 text-center text-sm text-slate-500">
+                  No submissions match the current filters.
+                </p>
+              )}
+            </div>
+
           {showDeletedSubmissions && (
             <div className="mt-6">
               <h3 className="text-lg font-semibold text-slate-700 mb-3">Deleted Submissions</h3>

@@ -19,7 +19,7 @@ const makeEmptyForm = () => ({
   attachments: [],
 });
 
-export default function ReminderForm({ user, onSubmit, uploading, onFileUpload, editingData, onCancelEdit }) {
+export default function ReminderForm({ user, onSubmit, uploading, onFileUpload, editingData, onCancelEdit, onClose }) {
   const [form, setForm] = useState(editingData || makeEmptyForm());
 
   const handleInvolvedPartiesUpdate = (newEntry, replacedList) => {
@@ -114,7 +114,9 @@ export default function ReminderForm({ user, onSubmit, uploading, onFileUpload, 
       <AttachmentPicker
         attachments={form.attachments}
         onFileUpload={onFileUpload}
-        onAdd={(urls) => setForm((f) => ({ ...f, attachments: [...f.attachments, ...urls] }))}
+        onAdd={(paths) => setForm((f) => ({ ...f, attachments: [...f.attachments, ...paths.map((p) => ({ url: p, label: "", note: null, note_by: null, note_at: null }))] }))}
+        onUpdate={(i, patch) => setForm((f) => ({ ...f, attachments: f.attachments.map((a, idx) => (idx === i ? { ...a, ...patch } : a)) }))}
+        onRemove={(i) => setForm((f) => ({ ...f, attachments: f.attachments.filter((_, idx) => idx !== i) }))}
       />
 
       {/* Submit */}
@@ -125,6 +127,13 @@ export default function ReminderForm({ user, onSubmit, uploading, onFileUpload, 
           className="rounded-xl bg-slate-900 px-6 py-3 font-semibold text-white hover:bg-slate-700 disabled:bg-slate-300"
         >
           {uploading ? "Waiting for upload..." : editingData ? "Save Changes" : "Submit Incident"}
+        </button>
+        <button
+          type="button"
+          className="rounded-xl border border-slate-300 px-6 py-3 font-medium text-slate-600 hover:bg-slate-50"
+          onClick={onClose}
+        >
+          Close Without Saving
         </button>
         {editingData && (
           <button

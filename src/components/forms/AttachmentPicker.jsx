@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import AttachmentLink from "@/components/AttachmentLink";
+import { normalizeAttachment } from "@/lib/supabase";
 
 const DOCUMENT_ACCEPT = "image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt";
 const IMAGE_ACCEPT = "image/*";
@@ -20,7 +21,7 @@ const formatBytes = (bytes) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-export default function AttachmentPicker({ attachments = [], onFileUpload, onAdd }) {
+export default function AttachmentPicker({ attachments = [], onFileUpload, onAdd, onUpdate, onRemove }) {
   const cameraInput = useRef(null);
   const libraryInput = useRef(null);
   const fileInput = useRef(null);
@@ -173,15 +174,40 @@ export default function AttachmentPicker({ attachments = [], onFileUpload, onAdd
       )}
 
       {attachments.length > 0 && (
-        <ul className="mt-3 space-y-1 text-sm text-slate-600">
-          {attachments.map((value, i) => (
-            <li key={`${value}-${i}`} className="truncate">
-              <AttachmentLink
-                value={value}
-                className="text-slate-700 underline hover:text-slate-900"
-              />
-            </li>
-          ))}
+        <ul className="mt-3 space-y-2 text-sm text-slate-600">
+          {attachments.map((value, i) => {
+            const att = normalizeAttachment(value);
+            return (
+              <li
+                key={`${att.url}-${i}`}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <AttachmentLink
+                    value={att}
+                    className="text-slate-700 underline hover:text-slate-900"
+                  />
+                  {onRemove && (
+                    <button
+                      type="button"
+                      className="shrink-0 text-xs text-rose-600 hover:underline"
+                      onClick={() => onRemove(i)}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                {onUpdate && (
+                  <input
+                    className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900"
+                    placeholder="Add a label or description for this file (optional)"
+                    value={att.label}
+                    onChange={(e) => onUpdate(i, { label: e.target.value })}
+                  />
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

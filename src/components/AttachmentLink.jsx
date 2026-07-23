@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createAttachmentSignedUrl, attachmentDisplayName } from "@/lib/supabase";
+import { createAttachmentSignedUrl, attachmentDisplayName, toAttachmentPath } from "@/lib/supabase";
 
 // Renders one attachment as a real link backed by a freshly signed URL.
 //
@@ -12,6 +12,10 @@ import { createAttachmentSignedUrl, attachmentDisplayName } from "@/lib/supabase
 export default function AttachmentLink({ value, className = "" }) {
   const [url, setUrl] = useState(null);
   const [error, setError] = useState("");
+
+  // Key on the resolved path, not the value: an attachment object gets a fresh
+  // identity on every parent render and would otherwise re-sign endlessly.
+  const path = toAttachmentPath(value);
 
   useEffect(() => {
     let cancelled = false;
@@ -25,7 +29,8 @@ export default function AttachmentLink({ value, className = "" }) {
 
     sign();
     return () => { cancelled = true; };
-  }, [value]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path]);
 
   const name = attachmentDisplayName(value);
 

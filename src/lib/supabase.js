@@ -31,15 +31,50 @@ export const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 // The attachments column stores object paths. Rows written while the bucket was
 // public stored a full public URL instead, so both shapes have to be accepted.
+// Accepts an attachment object or a bare string.
 export function toAttachmentPath(value) {
-  if (!value) return value;
+  const raw = value && typeof value === 'object' ? value.url : value;
+  if (!raw) return raw;
   const marker = `/${ATTACHMENT_BUCKET}/`;
-  const index = value.indexOf(marker);
-  return index === -1 ? value : value.slice(index + marker.length);
+  const index = raw.indexOf(marker);
+  return index === -1 ? raw : raw.slice(index + marker.length);
 }
 
+// Attachments are stored as { url, label, note, note_by, note_at }. `url` holds
+// the object path (new) or a full public URL (rows written while the bucket was
+// public). Older rows stored a bare string per attachment; normalize both shapes
+// so the rest of the app only ever deals with objects.
+export function normalizeAttachment(a) {
+  if (a && typeof a === 'object' && !Array.isArray(a)) {
+    return {
+      url: a.url ?? '',
+      label: a.label ?? '',
+      note: a.note ?? null,
+      note_by: a.note_by ?? null,
+      note_at: a.note_at ?? null,
+    };
+  }
+  return { url: a ?? '', label: '', note: null, note_by: null, note_at: null };
+}
+
+export function normalizeAttachments(raw) {
+  if (!raw) return [];
+  let arr = raw;
+  if (typeof raw === 'string') {
+    try {
+      arr = JSON.parse(raw);
+    } catch {
+      arr = [];
+    }
+  }
+  if (!Array.isArray(arr)) return [];
+  return arr.map(normalizeAttachment);
+}
+
+// `value` may be an attachment object or a bare string.
 export function attachmentDisplayName(value) {
-  const path = toAttachmentPath(value) || '';
+  const raw = value && typeof value === 'object' ? value.url : value;
+  const path = toAttachmentPath(raw) || '';
   try {
     return decodeURIComponent(path.split('/').pop().split('?')[0]);
   } catch {
