@@ -67,6 +67,18 @@ export default function WorkLogApp() {
   // `${entryId}:${index}`.
   const [attachmentDraft, setAttachmentDraft] = useState(null);
   const [attachmentSaving, setAttachmentSaving] = useState(false);
+  // Feature: confirm before discarding a form.
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  // Feature: unlock requests.
+  const [unlockRequests, setUnlockRequests] = useState([]);
+  const [unlockModalEntry, setUnlockModalEntry] = useState(null); // user requesting unlock
+  const [unlockReason, setUnlockReason] = useState("");
+  const [unlockSubmitting, setUnlockSubmitting] = useState(false);
+  const [unlockSent, setUnlockSent] = useState(false);
+  const [resolveRequest, setResolveRequest] = useState(null); // admin resolving
+  const [resolveNote, setResolveNote] = useState("");
+  const [resolveSubmitting, setResolveSubmitting] = useState(false);
+  const [unlockBannerDismissed, setUnlockBannerDismissed] = useState(false);
 
   const loadRecords = async (userProfile) => {
     const supabase = getSupabaseClient();
@@ -110,6 +122,18 @@ export default function WorkLogApp() {
     if (linkData) setGroupEntries(linkData);
   };
 
+  // RLS scopes this: an admin gets every pending request, a user only their own.
+  const loadUnlockRequests = async () => {
+    const supabase = getSupabaseClient();
+    if (!isSupabaseConfigured() || !supabase) return;
+    const { data } = await supabase
+      .from("unlock_requests")
+      .select("*")
+      .eq("status", "pending")
+      .order("requested_at", { ascending: false });
+    if (data) setUnlockRequests(data);
+  };
+
   // Declared after the loaders above so the effect does not reference them
   // before initialisation.
   useEffect(() => {
@@ -125,6 +149,7 @@ export default function WorkLogApp() {
           await loadRecords(userProfile);
           await loadPersonnel();
           await loadGroups();
+          await loadUnlockRequests();
         }
       }
       setLoading(false);
@@ -148,6 +173,7 @@ export default function WorkLogApp() {
       await loadRecords(userProfile);
       await loadPersonnel();
       await loadGroups();
+      await loadUnlockRequests();
     }
   };
 
@@ -574,6 +600,108 @@ export default function WorkLogApp() {
     setMessage("Attachment updated.");
   };
 
+  // Confirmed discard of an in-progress form: unmounts it (dropping its state)
+  // and returns to the empty New Submission screen. Nothing is written.
+  const performClose = () => {
+    setShowCloseConfirm(false);
+    setEditingData(null);
+    setActiveCategory("");
+    setViewMode("form");
+  };
+
+  const submitUnlockRequest = async () => {
+    if (!unlockModalEntry || !unlockReason.trim()) return;
+    setUnlockSubmitting(true);
+    setError("");
+    const supabase = getSupabaseClient();
+    const row = {
+      entry_id: unlockModalEntry.id,
+      requested_by: profile.id,
+      reason: unlockReason.trim(),
+      status: "pending",
+    };
+    if (isSupabaseConfigured() && supabase) {
+      const { data, error } = await supabase.from("unlock_requests").insert(row).select().single();
+      setUnlockSubmitting(false);
+      if (error) { setError(error.message); return; }
+      if (data) setUnlockRequests((cur) => [data, ...cur]);
+    } else {
+      setUnlockSubmitting(false);
+    }
+    setUnlockReason("");
+    setUnlockSent(true);
+  };
+
+  // Removes the lock, flags the entry so the user is notified, and marks the
+  // request resolved. Runs as the admin, so the entry update is permitted.
+  const confirmResolveUnlock = async () => {
+    const request = resolveRequest;
+    if (!request) return;
+    setResolveSubmitting(true);
+    setError("");
+    const supabase = getSupabaseClient();
+    const nowIso = new Date().toISOString();
+
+    if (isSupabaseConfigured() && supabase) {
+      const { data: entryData, error: entryError } = await supabase
+        .from("incident_entries")
+        .update({ locked: false, locked_at: null, locked_by: null, unlock_notification: true })
+        .eq("id", request.entry_id)
+        .select("id");
+      if (entryError) { setResolveSubmitting(false); setError(entryError.message); return; }
+      if (!entryData || entryData.length === 0) {
+        setResolveSubmitting(false);
+        setError("Nothing was saved — the database rejected the unlock.");
+        return;
+      }
+
+      const { error: reqError } = await supabase
+        .from("unlock_requests")
+        .update({
+          status: "resolved",
+          resolved_at: nowIso,
+          resolved_by: profile.full_name,
+          admin_note: resolveNote.trim() || null,
+        })
+        .eq("id", request.id);
+      if (reqError) { setResolveSubmitting(false); setError(reqError.message); return; }
+    }
+
+    setRecords((cur) =>
+      cur.map((r) =>
+        r.id === request.entry_id
+          ? { ...r, locked: false, locked_at: null, locked_by: null, unlock_notification: true }
+          : r,
+      ),
+    );
+    // Resolved requests leave the pending list.
+    setUnlockRequests((cur) => cur.filter((rq) => rq.id !== request.id));
+    setResolveSubmitting(false);
+    setResolveRequest(null);
+    setResolveNote("");
+    setMessage("Submission unlocked and the user has been notified.");
+  };
+
+  // Clears the "unlocked" banner: turns off unlock_notification on the user's own
+  // entries that carry it. The entries are unlocked by now, so the owner update
+  // policy allows it.
+  const clearUnlockNotifications = async () => {
+    const flagged = records.filter((r) => r.employee_id === profile?.id && r.unlock_notification);
+    if (flagged.length === 0) return;
+    const supabase = getSupabaseClient();
+    if (isSupabaseConfigured() && supabase) {
+      await supabase
+        .from("incident_entries")
+        .update({ unlock_notification: false })
+        .in("id", flagged.map((r) => r.id));
+    }
+    setRecords((cur) =>
+      cur.map((r) =>
+        r.employee_id === profile?.id && r.unlock_notification ? { ...r, unlock_notification: false } : r,
+      ),
+    );
+  };
+
   const exportCsv = () => {
     const filtered = records.filter((r) => {
       const matchCat = selectedCategory === "All" || r.category === selectedCategory;
@@ -813,6 +941,13 @@ export default function WorkLogApp() {
   const myVisibleRecords = records.filter(
     (r) => r.employee_id === profile?.id && r.status !== "deleted" && !r.hidden_from_user,
   );
+  const pendingUnlockCount = unlockRequests.filter((r) => r.status === "pending").length;
+  // A user has an unlock request pending for these entry ids (drives the button
+  // state in My Submissions).
+  const pendingUnlockEntryIds = new Set(unlockRequests.map((r) => r.entry_id));
+  const hasUnlockNotification = records.some(
+    (r) => r.employee_id === profile?.id && r.unlock_notification,
+  );
   const groupedEntryIds = new Set(groupEntries.map((ge) => ge.entry_id));
   const ungroupedAdminRecords = visibleAdminRecords.filter((r) => !groupedEntryIds.has(r.id));
   const adminColSpan = groupingMode ? 7 : 6;
@@ -1029,7 +1164,9 @@ export default function WorkLogApp() {
       // Discards the in-progress form and returns to the empty New Submission
       // screen (category dropdown only). Nothing is written to Supabase; the
       // form's own state is dropped when it unmounts.
-      onClose: () => { setEditingData(null); setActiveCategory(""); setViewMode("form"); },
+      // Opens a confirmation first; the form stays mounted (and its state
+      // intact) until the user confirms in performClose.
+      onClose: () => setShowCloseConfirm(true),
     };
     if (cat === "PHI") return <PHIForm {...commonProps} />;
     if (cat === "Late for Shift") return <LateForShiftForm {...commonProps} />;
@@ -1457,7 +1594,7 @@ export default function WorkLogApp() {
 
       <nav className="bg-white border-b border-slate-200">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="flex gap-1 py-2">
+          <div className="flex flex-wrap gap-1 py-2">
             <button
               onClick={() => setViewMode("form")}
               className={`rounded-lg px-4 py-2 text-sm font-medium ${viewMode === "form" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}
@@ -1465,7 +1602,7 @@ export default function WorkLogApp() {
               New Submission
             </button>
             <button
-              onClick={() => setViewMode("entries")}
+              onClick={() => { setViewMode("entries"); clearUnlockNotifications(); setUnlockBannerDismissed(true); }}
               className={`rounded-lg px-4 py-2 text-sm font-medium ${viewMode === "entries" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}
             >
               My Submissions
@@ -1477,6 +1614,12 @@ export default function WorkLogApp() {
                   className={`rounded-lg px-4 py-2 text-sm font-medium ${viewMode === "admin" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}
                 >
                   All Submissions
+                </button>
+                <button
+                  onClick={() => setViewMode("unlockRequests")}
+                  className={`rounded-lg px-4 py-2 text-sm font-medium ${viewMode === "unlockRequests" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+                >
+                  Unlock Requests ({pendingUnlockCount})
                 </button>
                 <button
                   onClick={() => setViewMode("categories")}
@@ -1497,6 +1640,17 @@ export default function WorkLogApp() {
       </nav>
 
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 space-y-6">
+        {hasUnlockNotification && !unlockBannerDismissed && (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            <span>🔓 A previously locked submission has been unlocked. You may now edit it.</span>
+            <button
+              className="shrink-0 rounded-full bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+              onClick={() => { setUnlockBannerDismissed(true); clearUnlockNotifications(); }}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         {message && (
           <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700">
             {message}
@@ -1597,9 +1751,18 @@ export default function WorkLogApp() {
                         {selectedEntry?.id === entry.id ? "Close" : "View"}
                       </button>
                       {entry.locked ? (
-                        <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-500">
-                          This submission has been locked and cannot be edited
-                        </span>
+                        pendingUnlockEntryIds.has(entry.id) ? (
+                          <span className="rounded-full bg-amber-100 px-3 py-1 text-sm text-amber-700">
+                            Unlock requested — awaiting review
+                          </span>
+                        ) : (
+                          <button
+                            className="rounded-full bg-slate-800 px-3 py-1 text-sm text-white hover:bg-slate-700"
+                            onClick={() => { setUnlockModalEntry(entry); setUnlockReason(""); setUnlockSent(false); }}
+                          >
+                            🔒 Request Unlock
+                          </button>
+                        )
                       ) : (
                         <>
                           <button
@@ -2100,7 +2263,175 @@ export default function WorkLogApp() {
             <UserManagement currentUserId={profile.id} />
           </section>
         )}
+
+        {viewMode === "unlockRequests" && profile?.role === ROLES.MASTER_ADMIN && (
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-4">
+              <p className="text-sm font-medium text-slate-500">Administrative</p>
+              <h2 className="text-2xl font-semibold">Unlock Requests ({pendingUnlockCount})</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Users have asked to edit these locked submissions.
+              </p>
+            </div>
+
+            {unlockRequests.filter((r) => r.status === "pending").length === 0 ? (
+              <p className="text-sm text-slate-500">No pending unlock requests.</p>
+            ) : (
+              <div className="space-y-3">
+                {unlockRequests
+                  .filter((r) => r.status === "pending")
+                  .map((request) => {
+                    const entry = records.find((r) => r.id === request.entry_id);
+                    return (
+                      <div key={request.id} className="rounded-xl border border-slate-200 p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-medium text-slate-900">
+                              {entry ? entry.category : "Submission"}
+                              {entry?.employee_name ? ` — ${entry.employee_name}` : ""}
+                            </p>
+                            <p className="text-sm text-slate-500">
+                              {entry ? `${entry.date} at ${entry.time}` : `Entry ${request.entry_id}`}
+                            </p>
+                            <p className="mt-2 text-sm text-slate-700">
+                              <span className="font-medium text-slate-500">Reason: </span>
+                              <span className="whitespace-pre-wrap">{request.reason || "—"}</span>
+                            </p>
+                            <p className="mt-1 text-xs text-slate-400">
+                              Requested {request.requested_at ? new Date(request.requested_at).toLocaleString() : ""}
+                            </p>
+                          </div>
+                          <button
+                            className="shrink-0 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+                            onClick={() => { setResolveRequest(request); setResolveNote(""); }}
+                          >
+                            🔓 Unlock
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </section>
+        )}
       </main>
+
+      {/* Close Without Saving confirmation */}
+      {showCloseConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-900">Are you sure?</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              This will discard everything you&apos;ve entered. This action cannot be undone.
+            </p>
+            <div className="mt-5 flex flex-col gap-2">
+              <button
+                className="w-full rounded-xl bg-rose-600 px-4 py-3 font-semibold text-white hover:bg-rose-700"
+                onClick={performClose}
+              >
+                Yes, Delete This Submission
+              </button>
+              <button
+                className="w-full rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 font-semibold text-emerald-700 hover:bg-emerald-100"
+                onClick={() => setShowCloseConfirm(false)}
+              >
+                No, Keep Working
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Request Unlock (user) */}
+      {unlockModalEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            {unlockSent ? (
+              <>
+                <h3 className="text-lg font-semibold text-slate-900">Request sent</h3>
+                <p className="mt-2 text-sm text-slate-600">Your request has been sent.</p>
+                <button
+                  className="mt-5 w-full rounded-xl bg-slate-900 px-4 py-3 font-semibold text-white hover:bg-slate-700"
+                  onClick={() => { setUnlockModalEntry(null); setUnlockSent(false); }}
+                >
+                  Done
+                </button>
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-semibold text-slate-900">Request Unlock</h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  {unlockModalEntry.category} · {unlockModalEntry.date}
+                </p>
+                <label className="mt-4 mb-1 block text-sm font-medium text-slate-700">
+                  What changes do you need to make?
+                </label>
+                <textarea
+                  className="min-h-28 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                  placeholder="Explain what you need to edit and why..."
+                  value={unlockReason}
+                  onChange={(e) => setUnlockReason(e.target.value)}
+                />
+                <div className="mt-5 flex flex-col gap-2">
+                  <button
+                    className="w-full rounded-xl bg-slate-900 px-4 py-3 font-semibold text-white hover:bg-slate-700 disabled:bg-slate-300"
+                    disabled={!unlockReason.trim() || unlockSubmitting}
+                    onClick={submitUnlockRequest}
+                  >
+                    {unlockSubmitting ? "Sending..." : "Submit Request"}
+                  </button>
+                  <button
+                    className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-500 hover:bg-slate-50"
+                    disabled={unlockSubmitting}
+                    onClick={() => setUnlockModalEntry(null)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Resolve unlock request (admin) */}
+      {resolveRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-900">Unlock Submission</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              This unlocks the submission so the user can edit it, and notifies them. You can add an
+              optional note.
+            </p>
+            <label className="mt-4 mb-1 block text-sm font-medium text-slate-700">
+              Note to the user (optional)
+            </label>
+            <textarea
+              className="min-h-24 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
+              placeholder="e.g. Please correct the date and resubmit."
+              value={resolveNote}
+              onChange={(e) => setResolveNote(e.target.value)}
+            />
+            <div className="mt-5 flex flex-col gap-2">
+              <button
+                className="w-full rounded-xl bg-slate-900 px-4 py-3 font-semibold text-white hover:bg-slate-700 disabled:bg-slate-300"
+                disabled={resolveSubmitting}
+                onClick={confirmResolveUnlock}
+              >
+                {resolveSubmitting ? "Unlocking..." : "Unlock & Notify User"}
+              </button>
+              <button
+                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-500 hover:bg-slate-50"
+                disabled={resolveSubmitting}
+                onClick={() => setResolveRequest(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create Group Dialog */}
       {showCreateGroup && (
