@@ -32,6 +32,11 @@ const row = (label, value) => {
 const sectionHeader = (title, accent = "slate") =>
   `<h2 class="section-header accent-${accent}">${esc(title)}</h2>`;
 
+// Wraps a header with its body in a keep-together block so the two never split
+// across a page — a section that would spill moves to the next page instead.
+const section = (title, accent, body) =>
+  `<section class="section">${sectionHeader(title, accent)}${body}</section>`;
+
 const personLine = (p) => {
   if (!p) return "";
   if (p.type === "ems") {
@@ -157,10 +162,7 @@ export function buildSubmissionHtml({ entry, attachments = [], groups = [], gene
   const attachmentsSection =
     attachments.length === 0
       ? ""
-      : `
-    ${sectionHeader("Attachments", "amber")}
-    ${imageThumbs}
-    ${fileList}`;
+      : section("Attachments", "amber", `${imageThumbs}${fileList}`);
 
   // Full-page image displays (page 2+).
   const imagePages = images
@@ -177,20 +179,25 @@ export function buildSubmissionHtml({ entry, attachments = [], groups = [], gene
     )
     .join("");
 
-  const partiesSection = `
-    ${sectionHeader("Involved Parties", "blue")}
-    ${parties.length ? `<ul class="people">${parties.map(personLine).join("")}</ul>` : `<p class="muted">None recorded.</p>`}`;
+  const partiesSection = section(
+    "Involved Parties",
+    "blue",
+    parties.length ? `<ul class="people">${parties.map(personLine).join("")}</ul>` : `<p class="muted">None recorded.</p>`,
+  );
 
-  const witnessesSection = `
-    ${sectionHeader("Witnesses", "blue")}
-    ${witnesses.length ? `<ul class="people">${witnesses.map(personLine).join("")}</ul>` : `<p class="muted">None recorded.</p>`}`;
+  const witnessesSection = section(
+    "Witnesses",
+    "blue",
+    witnesses.length ? `<ul class="people">${witnesses.map(personLine).join("")}</ul>` : `<p class="muted">None recorded.</p>`,
+  );
 
   const additionalSection =
     entry.additional_details || groupNotes
-      ? `
-    ${sectionHeader("Additional Details & Notes", "emerald")}
-    ${entry.additional_details ? `<p class="freeform">${esc(entry.additional_details)}</p>` : ""}
-    ${groupNotes}`
+      ? section(
+          "Additional Details & Notes",
+          "emerald",
+          `${entry.additional_details ? `<p class="freeform">${esc(entry.additional_details)}</p>` : ""}${groupNotes}`,
+        )
       : "";
 
   return `<!doctype html>
@@ -217,20 +224,24 @@ ${STYLES}
     <div class="brand-generated">Report generated<br><strong>${esc(generated)}</strong></div>
   </header>
 
-  ${sectionHeader("Submission Overview", "slate")}
-  <div class="badges">${badges.join("")}</div>
-  <div class="overview">
-    ${row("Employee", entry.employee_name)}
-    ${row("Category", entry.category)}
-    ${row("Date / Time", `${esc(entry.date)} at ${esc(entry.time)}`)}
-    ${row("Submitted", fmtDateTime(entry.created_at))}
-    ${row("Last Updated", fmtDateTime(entry.updated_at))}
-  </div>
+  ${section(
+    "Submission Overview",
+    "slate",
+    `<div class="badges">${badges.join("")}</div>
+     <div class="overview">
+       ${row("Employee", entry.employee_name)}
+       ${row("Category", entry.category)}
+       ${row("Date / Time", `${esc(entry.date)} at ${esc(entry.time)}`)}
+       ${row("Submitted", fmtDateTime(entry.created_at))}
+       ${row("Last Updated", fmtDateTime(entry.updated_at))}
+     </div>`,
+  )}
 
-  ${sectionHeader("Incident Details", "slate")}
-  <div class="details">
-    ${incidentDetails || `<p class="muted">No additional fields.</p>`}
-  </div>
+  ${section(
+    "Incident Details",
+    "slate",
+    `<div class="details">${incidentDetails || `<p class="muted">No additional fields.</p>`}</div>`,
+  )}
 
   ${partiesSection}
   ${witnessesSection}
@@ -276,10 +287,16 @@ const STYLES = `
   .brand-subtitle { font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: #64748b; }
   .brand-generated { text-align: right; font-size: 12px; color: #64748b; }
 
+  /* A section and its header stay together; a section that would spill moves to
+     the next page as a whole where it fits. */
+  .section { break-inside: avoid; page-break-inside: avoid; }
   .section-header {
     font-size: 15px; font-weight: 700; color: #fff; padding: 8px 12px;
     border-radius: 6px; margin: 22px 0 12px;
+    break-after: avoid; page-break-after: avoid;
   }
+  /* Individual items never split down the middle across a page edge. */
+  .row, .people li, .file-list li, .thumb, .note-box { break-inside: avoid; page-break-inside: avoid; }
   .accent-slate   { background: #334155; }
   .accent-blue    { background: #2563eb; }
   .accent-emerald { background: #059669; }
