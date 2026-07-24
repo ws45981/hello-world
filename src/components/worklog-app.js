@@ -1579,13 +1579,14 @@ export default function WorkLogApp() {
                 </div>
               )}
             </div>
-            <span className={`rounded-full px-3 py-1 text-xs font-medium ${
-              profile?.role === ROLES.MASTER_ADMIN ? "bg-emerald-600" :
-              profile?.role === ROLES.LEADERSHIP ? "bg-blue-600" : "bg-slate-600"
-            }`}>
-              {profile?.role === ROLES.MASTER_ADMIN ? "Master Admin" :
-               profile?.role === ROLES.LEADERSHIP ? "Leadership" : "General User"}
-            </span>
+            {/* Only Master Admin sees a role badge. Leadership and General User
+                labels are hidden to avoid access-level friction between staff;
+                the role is still visible to admins on the Users screen. */}
+            {profile?.role === ROLES.MASTER_ADMIN && (
+              <span className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-medium">
+                Master Admin
+              </span>
+            )}
             <button
               className="rounded-full border border-white/20 px-3 py-2 text-sm hover:bg-white/10"
               onClick={handleLogout}

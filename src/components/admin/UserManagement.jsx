@@ -35,6 +35,11 @@ export default function UserManagement({ currentUserId }) {
   const [savingId, setSavingId] = useState(null);
   const [savedId, setSavedId] = useState(null);
   const [rowErrors, setRowErrors] = useState({});
+  // Rows are collapsed by default — the list is just names until one is opened.
+  const [expandedIds, setExpandedIds] = useState([]);
+
+  const toggleExpanded = (id) =>
+    setExpandedIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
 
   // `loading` starts true, so this only ever settles it — no setState runs
   // synchronously while the effect body is executing.
@@ -164,9 +169,27 @@ export default function UserManagement({ currentUserId }) {
         const isSelf = user.id === currentUserId;
         const seesEverything = draft.role === ROLES.MASTER_ADMIN;
         const dirty = isDirty(user);
+        const expanded = expandedIds.includes(user.id);
 
         return (
-          <div key={user.id} className="rounded-xl border border-slate-200 p-4">
+          <div key={user.id} className="rounded-xl border border-slate-200">
+            {/* Collapsed: name banner + chevron. Expanded: full access controls. */}
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-50"
+              onClick={() => toggleExpanded(user.id)}
+              aria-expanded={expanded}
+            >
+              <span className="font-medium text-slate-900">
+                {user.full_name || "Unknown User"}
+                {isSelf && <span className="ml-2 text-xs text-slate-400">(you)</span>}
+                {dirty && <span className="ml-2 text-xs font-normal text-amber-600">• unsaved changes</span>}
+              </span>
+              <span className={`shrink-0 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`}>▾</span>
+            </button>
+
+            {expanded && (
+            <div className="px-4 pb-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <label className="mb-1 block text-sm text-slate-600">
@@ -260,6 +283,8 @@ export default function UserManagement({ currentUserId }) {
                 <span className="text-sm text-slate-400">Unsaved changes</span>
               )}
             </div>
+            </div>
+            )}
           </div>
         );
       })}
