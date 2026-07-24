@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { getSupabaseClient, isSupabaseConfigured, signOut, getCurrentUser, getUserProfile, toAttachmentPath, ATTACHMENT_BUCKET, normalizeAttachments } from "@/lib/supabase";
+import { getSupabaseClient, isSupabaseConfigured, signOut, getCurrentUser, getUserProfile, toAttachmentPath, ATTACHMENT_BUCKET, normalizeAttachments, createAttachmentSignedUrl, attachmentDisplayName } from "@/lib/supabase";
+import { buildSubmissionHtml, isImageName } from "@/lib/printSubmission";
 import AttachmentLink from "@/components/AttachmentLink";
 import { CATEGORIES, ROLES, GENERAL_USER_RESTRICTED_CATEGORIES } from "@/lib/constants";
 import LoginForm from "@/components/auth/LoginForm";
@@ -706,6 +707,40 @@ export default function WorkLogApp() {
     );
   };
 
+  // Opens a print-ready view for one submission in a new tab. The tab is opened
+  // synchronously so it keeps the click's user activation and is not popup
+  // blocked; signed URLs are resolved afterwards and the HTML written in.
+  const printSubmission = async (entry) => {
+    const win = window.open("", "_blank");
+    if (!win) {
+      setError("Pop-up blocked. Allow pop-ups for this site to print a submission.");
+      return;
+    }
+    win.document.write(
+      "<!doctype html><title>Preparing report…</title><body style='font-family:sans-serif;padding:2rem;color:#334155'>Preparing report…</body>",
+    );
+
+    const resolved = [];
+    for (const att of normalizeAttachments(entry.attachments)) {
+      const name = attachmentDisplayName(att);
+      const { url } = await createAttachmentSignedUrl(att);
+      resolved.push({ name, label: att.label || "", note: att.note || "", url: url || "", isImage: isImageName(name) });
+    }
+
+    const memberGroups = groups.filter((g) => entryIdsInGroup(g.id).includes(entry.id));
+
+    const html = buildSubmissionHtml({
+      entry,
+      attachments: resolved,
+      groups: memberGroups,
+      generatedAt: new Date(),
+    });
+
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+  };
+
   const exportCsv = () => {
     const filtered = records.filter((r) => {
       const matchCat = selectedCategory === "All" || r.category === selectedCategory;
@@ -1198,6 +1233,16 @@ export default function WorkLogApp() {
 
     return (
       <div className="grid gap-3 md:grid-cols-2">
+        {editable && (
+          <div className="md:col-span-2">
+            <button
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+              onClick={() => printSubmission(entry)}
+            >
+              🖨 Print / Save as PDF
+            </button>
+          </div>
+        )}
         <div>
           <p className="text-sm font-medium text-slate-500">Employee</p>
           <p>{entry.employee_name}</p>
