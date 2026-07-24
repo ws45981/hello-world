@@ -316,11 +316,22 @@ const STYLES = `
   .file-icon { font-size: 20px; }
   a { color: #2563eb; }
 
-  .image-page { page-break-before: always; margin-top: 24px; }
+  /* Keep each image with its header and never split it across pages. */
+  .image-page {
+    page-break-before: always; break-before: page;
+    page-break-inside: avoid; break-inside: avoid;
+    margin-top: 24px;
+  }
   .image-header { background: #334155; color: #fff; padding: 10px 14px; border-radius: 6px 6px 0 0; }
   .image-name { font-weight: 700; font-size: 15px; }
   .image-label, .image-note { font-size: 12px; opacity: 0.9; margin-top: 2px; }
-  .full-image { width: 100%; height: auto; display: block; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 6px 6px; }
+  /* Cap by both width and height (auto on the other axis) so a tall portrait
+     photo is scaled down to fit rather than overflowing onto extra pages. */
+  .full-image {
+    display: block; margin: 0 auto;
+    max-width: 100%; max-height: 80vh; width: auto; height: auto;
+    border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 6px 6px;
+  }
 
   @media print {
     .no-print { display: none !important; }
@@ -329,7 +340,16 @@ const STYLES = `
        backgrounds are replaced by outlines so nothing disappears. */
     .section-header { color: #000 !important; background: #fff !important; border: 2px solid #000; }
     .badge { color: #000 !important; background: #fff !important; border: 1px solid #000; }
-    .image-header { color: #000 !important; background: #fff !important; border: 2px solid #000; }
+    .image-header { color: #000 !important; background: #fff !important; border: 2px solid #000; flex: 0 0 auto; }
+    /* One page per image: fill the page as a column, image scaled to contain.
+       overflow:hidden eats any sub-pixel overflow that would spawn a blank page. */
+    .image-page { margin-top: 0; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+    .full-image {
+      flex: 1 1 auto; min-height: 0;
+      max-height: none; width: 100%; height: 100%;
+      object-fit: contain; object-position: center top;
+      border: 1px solid #000; border-top: none;
+    }
     .note-box { background: #fff !important; border: 1px solid #000; }
     .note-title { color: #000 !important; }
     .freeform { background: #fff !important; border-left: 4px solid #000; }
