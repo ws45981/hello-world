@@ -340,14 +340,13 @@ const STYLES = `
        backgrounds are replaced by outlines so nothing disappears. */
     .section-header { color: #000 !important; background: #fff !important; border: 2px solid #000; }
     .badge { color: #000 !important; background: #fff !important; border: 1px solid #000; }
-    .image-header { color: #000 !important; background: #fff !important; border: 2px solid #000; flex: 0 0 auto; }
-    /* One page per image: fill the page as a column, image scaled to contain.
-       overflow:hidden eats any sub-pixel overflow that would spawn a blank page. */
-    .image-page { margin-top: 0; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+    .image-header { color: #000 !important; background: #fff !important; border: 2px solid #000; }
+    /* No flex/object-fit here — print engines mishandle it and clip the image.
+       max-height + auto scales the whole photo down so header and image fit one
+       page together (break-inside: avoid, set on .image-page, keeps them joined). */
+    .image-page { margin-top: 0; }
     .full-image {
-      flex: 1 1 auto; min-height: 0;
-      max-height: none; width: 100%; height: 100%;
-      object-fit: contain; object-position: center top;
+      max-width: 100%; max-height: 78vh; width: auto; height: auto;
       border: 1px solid #000; border-top: none;
     }
     .note-box { background: #fff !important; border: 1px solid #000; }
